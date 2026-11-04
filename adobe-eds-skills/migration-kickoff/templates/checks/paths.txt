@@ -1,0 +1,3 @@
+# Paths for the smoke, axe and Lighthouse checks, one per line. Add a page of each template as it
+# is migrated, and the pages with behaviour (search, forms, lists, anything region- or login-gated).
+/

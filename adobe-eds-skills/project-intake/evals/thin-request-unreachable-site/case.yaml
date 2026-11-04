@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: thin-request-unreachable-site
+expected_outcome: |
+  A short plan in Markdown and PDF that doesn't invent what the email leaves out. The survey was
+  tried and the site didn't answer (the .example domain doesn't resolve), so the plan says so and
+  makes the survey a first action. It states no page counts or site size. It says "AEM" doesn't name
+  a target (Edge Delivery Services, AEM as a Cloud Service or AEM 6.5) and asks which, or names the
+  assumption it plans on. It turns the CRM-connected forms and the IT-maintained provider directory
+  into questions and dependencies (where submissions go, where the directory data comes from), and
+  asks for the open-enrollment date. No estimates.

@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: generic-handover-no-questions
+expected_outcome: |
+  A short handover, Markdown and PDF, for a project unlike the reference one. Built from the facts
+  script run in the clone. With no client questions, the questions section is titled "Common
+  questions" and covers four or five likely topics. Without access to that site's configuration, the
+  content source, production CDN, roles and DAM connection are "Not checked" rather than guessed.
+  It describes this project's own blocks, CI and tooling, with nothing carried over from the
+  reference project (no ZIP modal, shop, provider pages or redirects sheet unless the facts show them).
+  Lab scores are given with their method. Recorded on 2026-11-02.

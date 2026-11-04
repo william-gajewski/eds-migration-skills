@@ -1,0 +1,13 @@
+{
+  "name": "wgajewski-skills",
+  "description": "William Gajewski's Claude Code plugins",
+  "owner": {
+    "name": "William Gajewski"
+  },
+  "plugins": [
+    {
+      "name": "adobe-eds-skills",
+      "source": "./adobe-eds-skills"
+    }
+  ]
+}

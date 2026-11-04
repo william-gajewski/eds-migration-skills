@@ -1,0 +1,11 @@
+{
+  "name": "adobe-eds-skills",
+  "description": "Skills for migrating sites to AEM Edge Delivery Services with Document Authoring: a kickoff that sets up the project, a work plan from the client's documents, page parity with the original site, guarded publishing, redirects to the legacy site, and a client handover.",
+  "author": {
+    "name": "William Gajewski"
+  },
+  "homepage": "https://github.com/william-gajewski/eds-migration-skills",
+  "repository": "https://github.com/william-gajewski/eds-migration-skills",
+  "keywords": ["aem", "edge-delivery-services", "document-authoring", "migration", "kickoff", "publishing", "redirects", "handover"],
+  "skills": ["./"]
+}

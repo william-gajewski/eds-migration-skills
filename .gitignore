@@ -1,0 +1,7 @@
+# Eval workspaces: outputs and grading from skill test runs
+*-workspace/
+# Client-derived material kept next to a skill for local use only
+private/
+node_modules/
+.DS_Store
+Thumbs.db
