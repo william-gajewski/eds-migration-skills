@@ -15,6 +15,8 @@ const MAC = process.platform === 'darwin';
 const HOME = os.homedir();
 const LOCAL = process.env.LOCALAPPDATA || path.join(HOME, 'AppData', 'Local');
 const CONFIG = process.env.CLAUDE_CONFIG_DIR || path.join(HOME, '.claude');
+// Claude Code's plugin folder (installed_plugins.json, known_marketplaces.json, marketplaces/, cache/)
+const PLUGINS = process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR || path.join(CONFIG, 'plugins');
 
 const results = [];
 const add = (status, label, detail = '', fix = '') => results.push({
@@ -127,12 +129,13 @@ else {
 }
 
 // ---- Claude Code plugins (installed_plugins.json is Claude Code's own record; it can change) ----
-const installedFile = path.join(CONFIG, 'plugins', 'installed_plugins.json');
+const installedFile = path.join(PLUGINS, 'installed_plugins.json');
 const installed = readJson(installedFile)?.plugins;
 if (!installed) {
   add('info', 'Claude Code plugins not checked', `couldn't read ${installedFile}: run "claude plugin list", or /plugins in VS Code`);
 } else {
-  const enabled = readJson(path.join(CONFIG, 'settings.json'))?.enabledPlugins || {};
+  const settings = readJson(path.join(CONFIG, 'settings.json')) || {};
+  const enabled = settings.enabledPlugins || {};
   const want = [
     ['adobe-eds-skills', null, 'the migration skills', 'claude plugin install adobe-eds-skills@wgajewski-skills --scope user'],
     ['aem-edge-delivery-services', 'adobe-skills', 'Adobe\'s import, block and Document Authoring skills', 'claude plugin install aem-edge-delivery-services@adobe-skills --scope user'],
@@ -151,20 +154,22 @@ if (!installed) {
     } else add('warn', `${name} not installed`, what, fix);
   });
   // where the migration skills come from, and whether they update themselves
-  const market = readJson(path.join(CONFIG, 'plugins', 'known_marketplaces.json'))?.['wgajewski-skills'];
+  const market = readJson(path.join(PLUGINS, 'known_marketplaces.json'))?.['wgajewski-skills'];
+  // a settings entry's autoUpdate wins over known_marketplaces.json's (the /plugin toggle writes both)
+  const autoUpdate = settings.extraKnownMarketplaces?.['wgajewski-skills']?.autoUpdate ?? market?.autoUpdate;
   const repo = 'https://github.com/william-gajewski/eds-migration-skills.git';
   const toGit = `claude plugin marketplace remove wgajewski-skills, claude plugin marketplace add ${repo}, then ${want[0][3]}`;
   if (market?.source?.source === 'directory') {
     add('info', `wgajewski-skills is a local folder (${market.source.path})`, 'fine for a clone you edit; a zip copy never updates', `to follow the repository: ${toGit}`);
   } else if (market && JSON.stringify(market.source || {}).includes('/agent-skills')) {
     add('warn', 'wgajewski-skills points at the old repository', JSON.stringify(market.source), toGit);
-  } else if (market && market.autoUpdate !== true) {
+  } else if (market && autoUpdate !== true) {
     add('warn', 'wgajewski-skills: auto-update is off', 'new commits arrive only when you update by hand', '/plugin, Marketplaces, wgajewski-skills, Enable auto-update (or by hand: claude plugin marketplace update wgajewski-skills, then claude plugin update adobe-eds-skills@wgajewski-skills)');
   } else if (market) {
     add('ok', `wgajewski-skills updates itself${market.lastUpdated ? ` (last ${String(market.lastUpdated).slice(0, 10)})` : ''}`);
   }
   // the PDF scripts look for the whitepaper template in the plugin cache, whatever its scope
-  const cache = path.join(HOME, '.claude', 'plugins', 'cache');
+  const cache = path.join(PLUGINS, 'cache');
   const template = dirs(cache).flatMap((m) => dirs(path.join(cache, m)).filter((d) => /project-management$/.test(d))
     .flatMap((p) => dirs(path.join(cache, m, p)).map((v) => path.join(cache, m, p, v, 'templates', 'whitepaper.typ'))))
     .find((f) => fs.existsSync(f));

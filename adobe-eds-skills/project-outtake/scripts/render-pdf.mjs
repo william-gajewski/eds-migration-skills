@@ -48,7 +48,10 @@ function findTools() {
 // the aem-project-management plugin's whitepaper template and fonts
 function findWhitepaper() {
   const roots = [process.env.CLAUDE_PLUGIN_ROOT, path.join(process.cwd(), '.claude', 'plugins', 'project-management')].filter(Boolean);
-  const cache = path.join(os.homedir(), '.claude', 'plugins', 'cache');
+  // Claude Code's plugin folder: CLAUDE_CODE_PLUGIN_CACHE_DIR, else plugins/ in CLAUDE_CONFIG_DIR or ~/.claude
+  const plugins = process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR
+    || path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'plugins');
+  const cache = path.join(plugins, 'cache');
   dirs(cache).forEach((market) => dirs(market).filter((d) => /project-management$/.test(d)).forEach((plugin) => {
     dirs(plugin).sort().reverse().forEach((version) => roots.push(version));
   }));
