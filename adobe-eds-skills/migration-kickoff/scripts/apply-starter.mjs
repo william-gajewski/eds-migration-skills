@@ -6,19 +6,23 @@
 //   AGENTS.md                the project section, below Adobe's boilerplate lines
 //   CLAUDE.md                "see @AGENTS.md", as in the boilerplate, when there is none
 //   PROJECT-LOG.md           the dated log, with day 1's entry
+//   PROGRESS.md              the progress tracker project-intake wrote, when --progress names it
 //   .gitattributes           * text=auto eol=lf
 //   .editorconfig            [*] end_of_line = lf, insert_final_newline, utf-8
 //   .vscode/settings.json    "files.eol": "\n"
-//   .gitignore               the migration's local folders
-//   .hlxignore               test/* and *.md, so the checks and the notes aren't served
+//   .gitignore               the migration's local folders, and the page images of rendered PDFs
+//   .hlxignore               test/*, *.md, project-guides/* and status-reports/*, so the checks, the
+//                            notes, the handover and the progress reports aren't served
 //   .migration/project.json  org and site, which the migration skills read
+//   .migration/team.json     our team's sign-in domains, from --team, which progress-report reads
 //   test/checks/             smoke, axe and Lighthouse checks; package.json gets their npm scripts
 //                            and devDependencies (playwright, axe-core)
 //
 // usage: node apply-starter.mjs [--repo <dir>] [--org <org> --site <site>] [--client "Name"]
 //          [--legacy https://www.legacy.example]... [--day1 YYYY-MM-DD] [--branch <name>]
 //          [--owner "who owns the pages' state"] [--teams "other teams writing content"]
-//          [--breakpoints "768, 992, 1200"] [--prod www.client.example] [--dry-run]
+//          [--breakpoints "768, 992, 1200"] [--prod www.client.example]
+//          [--progress <intake folder>/PROGRESS.md] [--team "@ours.example,@partner.example"] [--dry-run]
 //   org and site default to .migration/project.json, then the git remote's owner and name
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -34,7 +38,10 @@ const SCRIPTS = {
   'check:axe': 'node test/checks/axe.mjs',
   'check:lighthouse': 'node test/checks/lighthouse.mjs',
 };
-const IGNORE = ['/import-work/', '/drafts/', '/content/', '/parity/', '/intake/', '/test/checks/results/', '.env'];
+const IGNORE = ['/import-work/', '/drafts/', '/content/', '/parity/', '/intake/', '/test/checks/results/', '.env', '/project-guides/*-pages/', '/status-reports/*-pages/'];
+// Edge Delivery Services serves every committed file that .hlxignore doesn't list: these keep the
+// checks, the notes, the handover and the progress reports off the site
+const HLX = [['test/*', 'the checks'], ['*.md', 'AGENTS.md and the notes'], ['project-guides/*', 'the handover'], ['status-reports/*', 'the progress reports']];
 const CHECKS = ['README.md', 'lib.mjs', 'smoke.mjs', 'axe.mjs', 'lighthouse.mjs', 'paths.txt'];
 
 function parseArgs(argv = process.argv.slice(2)) {
@@ -75,6 +82,7 @@ function write(file, text, verb, why = '') {
   fs.writeFileSync(file, text);
 }
 const at = (...p) => path.join(repo, ...p);
+const and = (list) => (list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0]);
 
 // ---- the site ----
 let org = opts.org && String(opts.org).toLowerCase();
@@ -158,6 +166,13 @@ else manual.push('CLAUDE.md doesn\'t import AGENTS.md: add a line "@AGENTS.md" t
 if (read(at('PROJECT-LOG.md')) === null) write(at('PROJECT-LOG.md'), fill(kit('PROJECT-LOG.md')), 'created', `day 1 is ${day1}`);
 else note('unchanged', at('PROJECT-LOG.md'), 'exists');
 
+// ---- PROGRESS.md: project-intake's tracker, copied in once ----
+const progressFrom = opts.progress && opts.progress !== true ? path.resolve(String(opts.progress)) : null;
+if (read(at('PROGRESS.md')) !== null) note('unchanged', at('PROGRESS.md'), 'exists');
+else if (progressFrom && fs.existsSync(progressFrom)) write(at('PROGRESS.md'), lf(fs.readFileSync(progressFrom, 'utf8')), 'created', `from ${progressFrom}`);
+else if (progressFrom) manual.push(`--progress ${progressFrom}: no such file.`);
+else manual.push('No PROGRESS.md: run this again with --progress <intake folder>/PROGRESS.md (project-intake writes it next to the plan), or let the progress-report skill start one.');
+
 // ---- line endings ----
 const attributes = read(at('.gitattributes'));
 if (attributes === null) write(at('.gitattributes'), '* text=auto eol=lf\n', 'created');
@@ -211,12 +226,14 @@ if (missing.length) {
 
 const hlx = read(at('.hlxignore'));
 if (hlx === null) {
-  write(at('.hlxignore'), '.*\n*.md\nLICENSE\npackage.json\npackage-lock.json\ntest/*\n', 'created', 'every committed file is served unless listed here');
+  write(at('.hlxignore'), '.*\n*.md\nLICENSE\npackage.json\npackage-lock.json\ntest/*\nproject-guides/*\nstatus-reports/*\n', 'created', 'every committed file is served unless listed here');
 } else {
   const rules = new Set(lf(hlx).split('\n').map((l) => l.trim()));
-  const add = ['test/*', '*.md'].filter((r) => !rules.has(r) && !(r === 'test/*' && (rules.has('test/') || rules.has('test/**'))));
-  if (add.length) write(at('.hlxignore'), `${lf(hlx).replace(/\n*$/, '\n')}${add.join('\n')}\n`, 'updated', `${add.join(' ')}, so ${add.includes('*.md') ? 'AGENTS.md and the log' : 'the checks'} aren't served`);
-  else note('unchanged', at('.hlxignore'), 'test/* and *.md');
+  // a folder rule (x/*) is also covered by x, x/, x/** and their /-anchored forms
+  const covered = (r) => rules.has(r) || (r.endsWith('/*') && ['', '/', '/**'].flatMap((s) => [`${r.slice(0, -2)}${s}`, `/${r.slice(0, -2)}${s}`, `/${r}`]).some((x) => rules.has(x)));
+  const add = HLX.filter(([r]) => !covered(r));
+  if (add.length) write(at('.hlxignore'), `${lf(hlx).replace(/\n*$/, '\n')}${add.map(([r]) => r).join('\n')}\n`, 'updated', `${add.map(([r]) => r).join(' ')}, to keep ${and(add.map(([, what]) => what))} off the site`);
+  else note('unchanged', at('.hlxignore'), HLX.map(([r]) => r).join(' '));
 }
 
 // ---- .migration/project.json, in the shape the import tools and the migration skills read ----
@@ -243,6 +260,12 @@ if (projectJson === null) {
   if (s && (s.previewOrg !== org || s.previewSite !== site)) manual.push(`.migration/project.json names ${s.previewOrg}/${s.previewSite}, not ${org}/${site}: check which is right.`);
   else note('unchanged', at('.migration', 'project.json'), `${org}/${site}`);
 }
+
+// ---- .migration/team.json: whose work is ours, for progress-report ----
+const teamList = opts.team && opts.team !== true ? String(opts.team).split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) : [];
+if (read(at('.migration', 'team.json')) !== null) note('unchanged', at('.migration', 'team.json'), 'exists');
+else if (teamList.length) write(at('.migration', 'team.json'), `${JSON.stringify({ team: teamList }, null, 2)}\n`, 'created', teamList.join(', '));
+else manual.push('No .migration/team.json: run this again with --team "@ours.example" (our team\'s sign-in domains). progress-report needs it to tell our work from the client\'s and other teams\'.');
 
 // ---- the checks ----
 CHECKS.forEach((name) => {

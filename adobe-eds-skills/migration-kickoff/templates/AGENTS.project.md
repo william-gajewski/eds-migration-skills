@@ -14,6 +14,7 @@
 ## Where things are
 
 - `PROJECT-LOG.md`: dated status, decisions and incidents, newest first. Read it when you need the history; add an entry when something is decided, published or found broken.
+- `PROGRESS.md`: the client's milestones, each workstream's deliverables and what the client owes, with their status. The `progress-report` skill keeps it up to date and writes the client's progress reports to `status-reports/`; `.migration/team.json` lists our team's sign-ins, so that work by the client's or other teams isn't reported as ours.
 - `MIGRATION-CHECKLIST.md` and `BACKLOG.md`, once they exist: every legacy page with its status, and the open work.
 - `.migration/project.json`: org and site, which the migration skills read. `.migration/redirects.config.json`: the redirects tool's settings, with every forced row and why.
 - `test/checks/`: smoke, accessibility and Lighthouse checks, `npm run check:smoke`, `check:axe` and `check:lighthouse`, each with `-- --host local|preview|live`. Their paths are in `test/checks/paths.txt`.

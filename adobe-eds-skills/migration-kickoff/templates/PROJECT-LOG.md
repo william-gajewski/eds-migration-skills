@@ -6,7 +6,7 @@ Dated status, decisions and incidents for {{CLIENT}}, newest first. `AGENTS.md` 
 - **Decided:** what, who decided, and why. A handover cites these for what is out of scope.
 - **Published:** what went live, and what was checked on live.
 - **Found:** a problem, with its fix or issue.
-- **Waiting on:** what the client or another team owes, and since when.
+- **Waiting on:** what the client or another team owes, and since when. PROGRESS.md's "Waiting on the client" table tracks it until it arrives.
 -->
 
 ## {{DAY1}}

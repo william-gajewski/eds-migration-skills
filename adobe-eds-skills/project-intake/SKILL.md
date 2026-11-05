@@ -1,6 +1,6 @@
 ---
 name: project-intake
-description: Turn a new client's request for work into a concise internal work plan, as Markdown and PDF and without estimates. Inputs can be an RFW, RFP, SOW draft, onboarding brief, discovery or kickoff notes. The plan covers scope, the current site (from a light survey of its sitemaps and pages), the target platform, workstreams with activities and deliverables, client dependencies, risks and the questions to ask. It draws on a real Edge Delivery Services migration, so it looks for what actually drives effort there (related sites, browser-built flows, regional content, search, forms, logins, redirects). Use it whenever someone shares a new client's documents and wants a plan, a scope summary, kickoff preparation or "what are we getting into", even if they never say "work plan".
+description: Turn a new client's request for work into a concise internal work plan, as Markdown and PDF and without estimates. Inputs can be an RFW, RFP, SOW draft, onboarding brief, discovery or kickoff notes. The plan covers scope, the current site (from a light survey of its sitemaps and pages), the target platform, workstreams with activities and deliverables, client dependencies, risks and the questions to ask, and comes with a progress tracker for the repository (PROGRESS.md) that the progress-report skill keeps up to date. It draws on a real Edge Delivery Services migration, so it looks for what actually drives effort there (related sites, browser-built flows, regional content, search, forms, logins, redirects). Use it whenever someone shares a new client's documents and wants a plan, a scope summary, kickoff preparation or "what are we getting into", even if they never say "work plan".
 ---
 
 # Project intake
@@ -84,7 +84,16 @@ Follow `references/plan-template.md`: its skeleton, writing rules and section no
 
 Save it as `<dir>/<client>-work-plan.md`.
 
-### 5. Render and look at it
+### 5. Write the progress tracker
+
+Turn the plan into `<dir>/PROGRESS.md`, following `references/progress-template.md`: the milestones
+the client named (with only the dates they gave), each workstream's deliverables, and the client
+dependencies as "Waiting on the client", every status Not started unless the documents say
+otherwise. It goes into the project's repository (migration-kickoff copies it in with the starter
+kit), where the progress-report skill keeps it up to date for each status report. So, unlike the
+plan, it names no people and holds nothing from "Internal context".
+
+### 6. Render and look at it
 
 ```bash
 node <skill>/scripts/render-pdf.mjs <dir>/<client>-work-plan.md --no-contents --png
@@ -95,11 +104,12 @@ This writes the PDF beside the Markdown, which is kept. With `--png` it also wri
 render again. `--paper a4` switches from US letter. If pandoc or typst is missing, the script says
 so; hand over the Markdown and say the PDF wasn't made.
 
-### 6. Report
+### 7. Report
 
-Tell the person where the plan and the survey are and how many pages the plan runs. Give the scope
-decisions it raises, the three or four questions that block the start, and anything you couldn't
-check (an unreachable site, a document you couldn't read).
+Tell the person where the plan, the tracker and the survey are and how many pages the plan runs.
+Give the scope decisions it raises, the three or four questions that block the start, and anything
+you couldn't check (an unreachable site, a document you couldn't read). The tracker goes in the
+repository's root once there is one; the plan stays out of it.
 
 ## Judgment calls
 

@@ -45,11 +45,14 @@ Collect these once, and ask for what's missing:
 - day 1's date and the working branch;
 - who owns the pages' state: the person who decides what is published, and what is restored when DA
   and live disagree. Ask; don't assume it's whoever runs the kickoff;
-- the other teams that write the same content (the client's authors, agencies, other developers).
+- the other teams that write the same content (the client's authors, agencies, other developers);
+- our team's sign-in domains (or addresses, when we sign in with the client's accounts), so that
+  progress reports count only our work.
 
 Run the `project-intake` skill on the documents. Keep its output outside the repository, in a
 workspace folder next to the clone (`<projects>/<client>/intake/`): the plan and the client's
-documents are confidential and never go in git.
+documents are confidential and never go in git. The exception is `PROGRESS.md`, the progress
+tracker it writes for the repository, which step 4 copies in.
 
 **Stop here.** The person reviews the plan and takes its blocking questions to the client. Go on when
 they say so.
@@ -76,13 +79,16 @@ public too, so name roles and teams there, not people.
 ```bash
 node <skill>/scripts/apply-starter.mjs --repo <clone> --org <org> --site <site> \
   --client "<Client>" --legacy https://www.legacy.example --day1 <YYYY-MM-DD> \
-  --branch <branch> --owner "<who owns the pages' state>" --teams "<other teams>" --dry-run
+  --branch <branch> --owner "<who owns the pages' state>" --teams "<other teams>" \
+  --progress <projects>/<client>/intake/PROGRESS.md --team "@ours.example" --dry-run
 ```
 
 The dry run shows what it would do; run it again without `--dry-run`. It only adds what a file
 lacks and never overwrites, so it's safe on a repository that already has some of the kit. What it
 can't merge (a `.gitattributes` without an LF rule, a CLAUDE.md that doesn't import AGENTS.md) it
-lists for you to do by hand. `--legacy` can be given once per legacy host.
+lists for you to do by hand. `--legacy` can be given once per legacy host. Read the tracker before
+it goes in: it's committed, so it must not name people or carry anything from the plan's
+"Internal context".
 
 Then, in the clone:
 
@@ -152,7 +158,8 @@ and `npm run check:axe -- --host preview`, so the checks are known to work befor
 - the machine check's open warnings, and what's still "_to fill in_";
 - the plan's blocking questions for the client;
 - what's next: the first import batch, then `legacy-redirects` after each batch, `safe-publish` for
-  every preview and publish, and `source-parity` for each template.
+  every preview and publish, `source-parity` for each template, and `progress-report` before each
+  client call.
 
 ## The starter kit
 
@@ -160,10 +167,12 @@ and `npm run check:axe -- --host preview`, so the checks are known to work befor
 |:--|:--|
 | `AGENTS.md` | Adobe's boilerplate lines, then the project section: the project's facts (site, hosts, legacy site and its breakpoints, day 1, who owns the pages' state, the other teams), where things are, and the lasting rules for content, publishing, redirects and code. About 70 lines. |
 | `CLAUDE.md` | `see @AGENTS.md`, as the boilerplate ships it, so Claude Code reads the same file as other agent tools |
-| `PROJECT-LOG.md` | dated status, decisions and incidents, newest first; project-outtake reads it |
+| `PROJECT-LOG.md` | dated status, decisions and incidents, newest first; project-outtake and progress-report read it |
+| `PROGRESS.md` | project-intake's tracker, copied in with `--progress`: the client's milestones, each workstream's deliverables and what the client owes, with their status; progress-report keeps it up to date and writes its reports to `status-reports/` |
 | `.gitattributes`, `.editorconfig`, `.vscode/settings.json` | LF line endings for git, editors and VS Code |
-| `.gitignore`, `.hlxignore` | local folders (`import-work/`, `drafts/`, `content/`, `parity/`, `intake/`, check results) kept out of git; the checks and the notes kept off the site |
+| `.gitignore`, `.hlxignore` | local folders (`import-work/`, `drafts/`, `content/`, `parity/`, `intake/`, check results, PDF page images) kept out of git; the checks, the notes, the handover (`project-guides/`) and the progress reports (`status-reports/`) kept off the site, which serves every committed file `.hlxignore` doesn't list |
 | `.migration/project.json` | org and site, in the shape the import tools and the migration skills read |
+| `.migration/team.json` | our team's sign-in domains, from `--team`; progress-report reads them to tell our work from the client's and other teams' |
 | `test/checks/` | `check:smoke`, `check:axe` and `check:lighthouse`, run locally against `aem up`, preview or live; `playwright` and `axe-core` become devDependencies |
 
 CI stays the boilerplate's lint workflow. The checks run locally; a workflow that runs them on the

@@ -7,4 +7,6 @@ expected_outcome: |
   a target (Edge Delivery Services, AEM as a Cloud Service or AEM 6.5) and asks which, or names the
   assumption it plans on. It turns the CRM-connected forms and the IT-maintained provider directory
   into questions and dependencies (where submissions go, where the directory data comes from), and
-  asks for the open-enrollment date. No estimates.
+  asks for the open-enrollment date. No estimates. A PROGRESS.md tracker sits next to the plan, with
+  every deliverable Not started, the client dependencies as "Waiting on the client", and no dates the
+  email doesn't give.
