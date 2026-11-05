@@ -64,6 +64,12 @@ GitHub emails you.
    session, run `/plugin`, open **Marketplaces**, choose `wgajewski-skills` and select
    **Enable auto-update**.
 
+   If the menu has no **Enable auto-update**, Claude Code's own updates are switched off on your
+   machine (`DISABLE_AUTOUPDATER`, `DISABLE_UPDATES`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` or
+   `"autoUpdates": false`), and that stops plugin updates too. Add
+   `"FORCE_AUTOUPDATE_PLUGINS": "1"` to the `env` block of `~/.claude/settings.json`, restart Claude
+   Code and look again. The machine check names the switch and where it's set.
+
 4. **Check.** `claude plugin list` shows the plugin with a 12-character commit id as its version.
    The machine check (above) also reports whether auto-update is on.
 

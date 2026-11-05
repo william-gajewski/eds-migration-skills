@@ -40,6 +40,13 @@ const dirs = (p) => {
     return [];
   }
 };
+const files = (p) => {
+  try {
+    return fs.readdirSync(p, { withFileTypes: true }).filter((d) => d.isFile()).map((d) => d.name);
+  } catch (e) {
+    return [];
+  }
+};
 const readJson = (file) => {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -157,12 +164,49 @@ if (!installed) {
   const market = readJson(path.join(PLUGINS, 'known_marketplaces.json'))?.['wgajewski-skills'];
   // a settings entry's autoUpdate wins over known_marketplaces.json's (the /plugin toggle writes both)
   const autoUpdate = settings.extraKnownMarketplaces?.['wgajewski-skills']?.autoUpdate ?? market?.autoUpdate;
+  // Claude Code's own update switches also stop plugin auto-update and hide "Enable auto-update" in
+  // /plugin, unless FORCE_AUTOUPDATE_PLUGINS is on. Claude Code applies the env blocks of .claude.json,
+  // settings.json and the managed settings over the shell's, in that order, so the last one to set a
+  // variable wins (read from Claude Code 2.1.318). Registry and MDM policies aren't read here
+  const globalFile = path.join(process.env.CLAUDE_CONFIG_DIR || HOME, '.claude.json');
+  const globalConfig = readJson(globalFile) || {};
+  let managed = '/etc/claude-code';
+  if (WIN) managed = 'C:/Program Files/ClaudeCode';
+  else if (MAC) managed = '/Library/Application Support/ClaudeCode';
+  const dropIns = path.join(managed, 'managed-settings.d');
+  const layers = [
+    ['this shell', process.env],
+    [globalFile, globalConfig.env],
+    [path.join(CONFIG, 'settings.json'), settings.env],
+    ...[path.join(managed, 'managed-settings.json'),
+      ...files(dropIns).filter((f) => f.endsWith('.json')).sort().map((f) => path.join(dropIns, f))]
+      .map((f) => [f, readJson(f)?.env]),
+  ];
+  const envSetting = (name) => layers.reduce((found, [where, env]) => (env?.[name] !== undefined
+    ? { value: String(env[name]), where } : found), null);
+  const isOn = (s) => ['1', 'true', 'yes', 'on'].includes(s?.value.trim().toLowerCase());
+  const anyValue = (s) => Boolean(s?.value); // any value counts here, even 0 or false
+  const switches = [];
+  if (!isOn(envSetting('FORCE_AUTOUPDATE_PLUGINS'))) {
+    [['DISABLE_UPDATES', isOn], ['DISABLE_AUTOUPDATER', isOn], ['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', anyValue]]
+      .forEach(([name, counts]) => {
+        const s = envSetting(name);
+        if (counts(s)) switches.push(`${name}=${s.value} in ${s.where}`);
+      });
+    if (globalConfig.autoUpdates === false
+      && (globalConfig.installMethod !== 'native' || globalConfig.autoUpdatesProtectedForNative !== true)) {
+      switches.push(`"autoUpdates": false in ${globalFile}`);
+    }
+  }
   const repo = 'https://github.com/william-gajewski/eds-migration-skills.git';
   const toGit = `claude plugin marketplace remove wgajewski-skills, claude plugin marketplace add ${repo}, then ${want[0][3]}`;
   if (market?.source?.source === 'directory') {
     add('info', `wgajewski-skills is a local folder (${market.source.path})`, 'fine for a clone you edit; a zip copy never updates', `to follow the repository: ${toGit}`);
   } else if (market && JSON.stringify(market.source || {}).includes('/agent-skills')) {
     add('warn', 'wgajewski-skills points at the old repository', JSON.stringify(market.source), toGit);
+  } else if (market && switches.length) {
+    add('warn', 'wgajewski-skills can\'t update itself', `Claude Code's own updates are switched off (${switches.join('; ')}), which stops plugin updates too and hides Enable auto-update in /plugin`,
+      `add "FORCE_AUTOUPDATE_PLUGINS": "1" to the "env" block of ${path.join(CONFIG, 'settings.json')} and restart Claude Code (its own updates stay off)${autoUpdate === true ? '' : ', then /plugin, Marketplaces, wgajewski-skills, Enable auto-update'}`);
   } else if (market && autoUpdate !== true) {
     add('warn', 'wgajewski-skills: auto-update is off', 'new commits arrive only when you update by hand', '/plugin, Marketplaces, wgajewski-skills, Enable auto-update (or by hand: claude plugin marketplace update wgajewski-skills, then claude plugin update adobe-eds-skills@wgajewski-skills)');
   } else if (market) {
