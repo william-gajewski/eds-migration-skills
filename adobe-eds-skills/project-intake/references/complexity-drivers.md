@@ -3,9 +3,9 @@
 What drove the effort on a real migration (a corporate site, its shop and a related provider
 site, moved to Edge Delivery Services with Document Authoring in 2026), and how to spot each one
 before the work starts. Go through the list with the client's documents and the survey
-open. A driver earns a place in the plan only when there's a signal for it; then it becomes an
-activity, a dependency, a risk or an open question, whichever fits. Don't list the drivers that
-don't apply.
+open. A driver earns a place in the plan only when there's a signal for it; then it becomes a
+scope item, something we need from the client, a question, or a factor that pushes the four weeks
+out, whichever fits. Don't list the drivers that don't apply.
 
 ## Contents
 

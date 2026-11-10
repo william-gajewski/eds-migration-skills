@@ -30,7 +30,9 @@ fails the first time someone checks.
   the PDF.
 
 Scripts are in this skill's `scripts/` folder; call them by absolute path. Save the handover where
-the person says, or in `project-guides/` in the repository.
+the person says, or in `project-guides/` in the repository. Before it's committed there, check that
+`.hlxignore` lists `project-guides/*`: the site serves every committed file `.hlxignore` doesn't
+list, the PDF and facts.json included. The starter kit adds the line.
 
 ## Workflow
 
