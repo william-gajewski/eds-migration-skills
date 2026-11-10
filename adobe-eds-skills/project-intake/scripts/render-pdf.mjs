@@ -112,6 +112,8 @@ if (r.status === 0 && opts.png) {
   const t = spawnSync(pandoc, [path.basename(md), '-f', 'markdown-smart', '-t', 'typst', '-s', '-o', typ, ...vars], { cwd, env, encoding: 'utf8' });
   previews = pdf.replace(/\.pdf$/i, '-pages');
   fs.mkdirSync(previews, { recursive: true });
+  // a shorter re-render would otherwise leave the previous render's last pages behind
+  fs.readdirSync(previews).filter((f) => /^page-\d+\.png$/.test(f)).forEach((f) => fs.rmSync(path.join(previews, f)));
   const c = t.status === 0 && spawnSync(typst, ['compile', '--format', 'png', '--ppi', '100', typ, path.join(previews, 'page-{p}.png')], { cwd, env, encoding: 'utf8' });
   if (!c || c.status !== 0) notes.push(`page images failed: ${((c && c.stderr) || t.stderr || '').trim().split('\n')[0]}`);
   fs.rmSync(typ, { force: true });

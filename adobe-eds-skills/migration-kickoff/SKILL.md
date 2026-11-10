@@ -47,12 +47,17 @@ Collect these once, and ask for what's missing:
   and live disagree. Ask; don't assume it's whoever runs the kickoff;
 - the other teams that write the same content (the client's authors, agencies, other developers);
 - our team's sign-in domains (or addresses, when we sign in with the client's accounts), so that
-  progress reports count only our work.
+  progress reports count only our work;
+- the team for the plan: our architect, developers and project manager, and the platform vendor's
+  EA ("to be assigned" is an answer);
+- the joint call with the platform vendor and the client: its day, time and time zone, and who
+  attends, if it's set.
 
-Run the `project-intake` skill on the documents. Keep its output outside the repository, in a
-workspace folder next to the clone (`<projects>/<client>/intake/`): the plan and the client's
-documents are confidential and never go in git. The exception is `PROGRESS.md`, the progress
-tracker it writes for the repository, which step 4 copies in.
+Run the `project-intake` skill on the documents, with the team and the meeting you collected. Keep
+its output outside the repository, in a workspace folder next to the clone
+(`<projects>/<client>/intake/`): the plan, its internal notes and the client's documents never go in
+git (the plan names people; the notes and the documents are confidential). The exception is
+`PROGRESS.md`, the progress tracker it writes for the repository, which step 4 copies in.
 
 **Stop here.** The person reviews the plan and takes its blocking questions to the client. Go on when
 they say so.
@@ -87,8 +92,8 @@ The dry run shows what it would do; run it again without `--dry-run`. It only ad
 lacks and never overwrites, so it's safe on a repository that already has some of the kit. What it
 can't merge (a `.gitattributes` without an LF rule, a CLAUDE.md that doesn't import AGENTS.md) it
 lists for you to do by hand. `--legacy` can be given once per legacy host. Read the tracker before
-it goes in: it's committed, so it must not name people or carry anything from the plan's
-"Internal context".
+it goes in: it's committed, so it must not name people or carry anything from the plan's internal
+notes.
 
 Then, in the clone:
 
@@ -156,7 +161,7 @@ and `npm run check:axe -- --host preview`, so the checks are known to work befor
 - what changed in the working tree, as the list to commit (nothing is staged);
 - what stays out of git: the plan, `parity/baseline/`, `import-work/`;
 - the machine check's open warnings, and what's still "_to fill in_";
-- the plan's blocking questions for the client;
+- the plan's verdict on the four weeks, and its blocking questions for the client;
 - what's next: the first import batch, then `legacy-redirects` after each batch, `safe-publish` for
   every preview and publish, `source-parity` for each template, and `progress-report` before each
   client call.

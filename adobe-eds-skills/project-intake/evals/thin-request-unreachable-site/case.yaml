@@ -1,12 +1,18 @@
 schema_version: "1.1"
 name: thin-request-unreachable-site
 expected_outcome: |
-  A short plan in Markdown and PDF that doesn't invent what the email leaves out. The survey was
-  tried and the site didn't answer (the .example domain doesn't resolve), so the plan says so and
-  makes the survey a first action. It states no page counts or site size. It says "AEM" doesn't name
-  a target (Edge Delivery Services, AEM as a Cloud Service or AEM 6.5) and asks which, or names the
-  assumption it plans on. It turns the CRM-connected forms and the IT-maintained provider directory
-  into questions and dependencies (where submissions go, where the directory data comes from), and
-  asks for the open-enrollment date. No estimates. A PROGRESS.md tracker sits next to the plan, with
-  every deliverable Not started, the client dependencies as "Waiting on the client", and no dates the
+  A short plan in Markdown and PDF, in six sections (purpose and summary, team, scope of work, gaps
+  and questions, project plan, meeting cadence), that doesn't invent what the email leaves out. The
+  survey was tried and the site didn't answer (the .example domain doesn't resolve), so the plan
+  says so and makes the survey a first action. It states no page counts or site size. It says
+  "AEM" doesn't name a target (Edge Delivery Services, AEM as a Cloud Service or AEM 6.5) and asks
+  which, or names the assumption it plans on. It turns the CRM-connected forms and the
+  IT-maintained provider directory into questions and dependencies (where submissions go, where the
+  directory data comes from), and asks for the open-enrollment date. The email names nobody on our
+  side or the platform vendor's, so the team's architect, developers, project manager and EA are to
+  be assigned, and the meeting cadence is to agree, with a question. The project plan measures the
+  work against the usual four weeks: with the size unknown and the forms and directory open, it
+  doesn't promise the work fits, and it names those as what could push it out, without adding week
+  counts. No effort, cost or pricing. A PROGRESS.md tracker sits next to the plan, with every
+  deliverable Not started, the client dependencies as "Waiting on the client", and no dates the
   email doesn't give.
