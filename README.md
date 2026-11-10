@@ -16,6 +16,7 @@ Claude Code plugins by William Gajewski, published as a plugin marketplace named
 | `safe-publish` | preview, publish or restore after checking DA, preview and live, and who saved what, with a backup first |
 | `legacy-redirects` | build, check and upload the redirects sheet without hiding pages that have been migrated |
 | `project-outtake` | write one client-facing handover, every claim checked against the repo, the live site, the configuration and Lighthouse |
+| `eds-delivery-planner` | propose an Adobe EA/Merkle team and week-by-week EDS plan using accessible resourcing and OOO data, while surfacing gaps and risks |
 
 Claude picks a skill when a request matches its description. To call one directly, type
 `/adobe-eds-skills:<skill>`, for example `/adobe-eds-skills:project-intake`.
