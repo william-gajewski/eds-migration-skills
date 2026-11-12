@@ -1,93 +1,80 @@
 ---
 name: eds-delivery-planner
-description: Plan and staff Adobe Edge Delivery Services projects around team capacity and out-of-office availability. Use when preparing an EDS delivery plan, choosing an Adobe EA and Merkle team, checking OOO conflicts, confirming meeting cadence, or assessing whether a four-week plan is realistic.
+description: Check staffing and availability for an AEM Edge Delivery Services project after project-intake, using its plan and an approved roster and OOO data. Use to validate role assignments, capacity, absence conflicts, meeting availability, or start-blocking gaps.
 ---
 
-# EDS delivery planner
+# AEM Edge Delivery Services team availability check
 
-Create a practical project team and delivery plan using the project brief and the current,
-approved resourcing and availability information the user provides or that is accessible in the
-workspace. The plan should make staffing conflicts, schedule assumptions, gaps and risks visible;
-it is not a commitment or an estimate.
+Run this skill after `project-intake` has written the work plan. Keep it separate: the intake plan
+is written for sharing, while roster and out-of-office (OOO) information is internal and changes
+often. Check the proposed team and schedule against approved sources; do not make a second project
+plan or promise a delivery date.
+
+Re-run this check at least weekly while the project start is upcoming, and whenever the start date,
+assignments, allocations or meeting details change. A new availability check does not require
+rewriting an unchanged intake plan.
 
 ## Find the inputs
 
-1. Read the user's project brief, notes and any resourcing or availability source they identify.
-   Look for the data structure in [resourcing data template](./references/resourcing-data-template.md).
-2. Use a source only if it is available in the workspace or through an enabled connector. Do not
-   claim to have checked a link, calendar or shared drive that you cannot access. Ask the user to
-   provide accessible information when needed.
-   For SharePoint or OneDrive spreadsheets, require an authorized connector or an accessible,
-   sanitized export; a share URL alone does not grant the agent access. Never copy private share
-   links, credentials or authorization details into repository files.
-3. Check when the roster and availability were last updated. If the information is missing,
-   stale, contradictory or incomplete, identify that limitation and ask focused questions. Do not
-   silently treat unknown availability as available.
-4. Do not copy actual team names, OOO dates or project details into this skill or its templates.
-   Read the minimum necessary availability data, use OOO dates only (not reasons), and do not
-   publish or share the resulting plan outside the user's requested destination.
+1. Read the intake plan's **Team** and **Project plan** sections. Read its meeting cadence when
+   checking the listed attendees' availability. Find the approved roster and availability source
+   the user identifies, using the structure in [resourcing data template](./references/resourcing-data-template.md).
+2. Use a source only if it is accessible in the workspace or through an enabled connector. A share
+   URL alone is not access. Never claim to have checked a link, calendar or drive you cannot open;
+   ask for an accessible, sanitized export or authorized connector. Never copy private share links,
+   credentials or authorization details into repository files.
+3. Check when the roster and availability were last verified. Treat information as stale if its
+   verification date is more than 30 days before the check, or if it predates the confirmed project
+   start date. Missing or contradictory verification dates mean freshness is unknown. Flag stale or
+   unknown data, do not treat it as confirmation, and ask for an updated source.
+4. A confirmed project start date is required to map OOO dates to project weeks. If it is missing or
+   unconfirmed, ask for it as a blocking question. Do not label absences Week 1, Week 2, or similar.
+   You may still report calendar-date overlaps without assigning project-week labels.
+5. Read only the availability information needed for this check. Use OOO dates only, never reasons.
+   Do not copy real names, OOO dates or project details into this skill, its templates, or its eval
+   inputs. Do not publish or share the internal note.
 
-## Build the plan
+## Check staffing and availability
 
-Use the following sections, in this order. Tailor the amount of detail to the information given;
-mark unknowns as questions rather than filling them with typical assumptions.
+- Compare each role and allocation in the intake plan with the roster. Keep confirmed assignments
+  distinct from recommendations. If the plan says a role is to be assigned, suggest a roster
+  candidate only when their role and stated capacity fit; mark the person and assignment as
+  **proposed**, not confirmed. If the roster is stale, incomplete or does not show a fit, state the
+  gap and ask for a decision rather than presenting availability as certain.
+- Use only the allocation and effective dates the source provides. Do not invent allocations,
+  convert them to person-hours, or treat unlisted capacity as full-time.
+- With a confirmed start date, map each OOO date to the intake plan's project weeks. Week 1 starts
+  on the confirmed start date; each following project week is the next seven calendar days. Show
+  ISO date ranges in the internal note, and interpret workdays and OOO dates in each person's
+  stated time zone. If a time zone or date is unclear, flag it rather than guessing.
+- Identify OOO overlaps with planned work, reduced capacity during planned work, and uncovered
+  roles. For each, state the affected role and project week (when known), the evidence and freshness
+  limitation, the schedule or staffing impact, and the decision or mitigation needed. Do not invent
+  a backup; propose one only when the roster supports it.
+- If meeting details and attendee schedules are available, compare the meeting's stated day, time
+  and time zone with each attendee's workdays and working hours in their own time zone. Flag
+  conflicts or missing details. Never infer a meeting time or working hours from where someone
+  lives.
 
-### Purpose and summary
+## Write the internal note
 
-Summarize the project goal, intended outcome, planning window and key constraints. Cite the brief or
-availability source for material facts, or label an assumption.
+Save one internal Markdown note next to the intake plan, in
+`<projects>/<client>/intake/<client>-availability-note.md`. This directory must be outside the
+project's Git repository. If its location is unknown or inside the repository, ask for an
+approved external destination; do not save the note in the repository as a fallback.
 
-### Team
+Include:
 
-List the proposed Adobe EA and Merkle team separately, with the assigned architect, developer(s)
-and project manager. For each person, show their role, organization and relevant capacity or
-availability constraint. Distinguish confirmed assignments from recommendations. If the matrix
-does not identify a suitable person or capacity, flag the gap; do not invent a person or allocation.
+- the intake plan and roster/availability sources reviewed, their last-verified dates, and any
+  freshness or access limitations;
+- a role-by-role result with the person and team side where known, confirmed or proposed status,
+  stated allocation and effective dates, relevant OOO date ranges and project weeks, conflicts,
+  and decisions needed;
+- meeting attendee conflicts or missing time-zone/working-hours details, if applicable;
+- a short set of anonymized rows that can be used in the shared plan's **What could move it**
+  section. Each row may name only the affected role and project week; omit people, exact dates,
+  OOO details and reasons.
 
-### Scope of work
-
-Summarize in-scope work, out-of-scope work and dependencies. Keep undecided items explicit.
-
-### Gaps and questions
-
-List the missing information or decisions that could change staffing, sequence, duration or
-meeting cadence. Put start-blocking questions first and state who should answer when known.
-
-### Project plan
-
-Use four weeks as the normal planning baseline, not a promise. Provide a week-by-week sequence,
-major outcomes and ownership. Compare the proposed dates with known capacity, OOO dates,
-dependencies, client readiness and required decisions.
-
-- If no start date is supplied, use Week 1–Week 4 labels; do not invent calendar dates.
-- If capacity or working days are unknown, say so and avoid implying full-time availability.
-- Explain what could extend the plan (for example, unavailable key roles, unresolved scope,
-  delayed access/content/decisions or work that depends on a person's return).
-- Identify any confirmed evidence that could shorten it, and do not shorten it merely because
-  the team appears available.
-- Where OOO overlaps critical work, propose a sequencing change or backup only if the source
-  supports it. Otherwise, state the conflict and ask for a decision.
-- Do not calculate person-hours or promise delivery dates unless the source provides the needed
-  assumptions and the user asks for that level of planning.
-
-### Meeting cadence
-
-Record the day, time, time zone, frequency and attendees for Adobe/Merkle internal and client
-meetings separately when provided. Flag missing time zones or attendee conflicts. Do not infer a
-meeting time from a person's location.
-
-### Risks and mitigations
-
-State each risk, its evidence or assumption, its impact on staffing/schedule, and a practical
-mitigation or decision needed. Include uncertainty in the source data itself as a risk when it
-affects the plan.
-
-## Final checks
-
-- Every named assignment, availability constraint, date and meeting time is supported by an
-  accessible source or explicitly marked as proposed.
-- The four-week baseline is clearly distinguished from a committed schedule.
-- Adobe EA and Merkle responsibilities are clear, and gaps are not disguised as assignments.
-- OOO is used only to reason about availability; do not state or infer why someone is away.
-- End with the source(s) reviewed, their last-updated date if known, and the most important
-  decisions needed to finalize the plan.
+Do not edit or overwrite the shareable intake plan by default. If asked to update its **What could
+move it** section, add only anonymized role-and-week rows; never expose names, exact OOO dates or
+reasons there. End the note with the decisions needed to confirm staffing and availability.

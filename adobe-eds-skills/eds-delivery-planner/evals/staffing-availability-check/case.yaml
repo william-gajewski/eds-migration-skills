@@ -1,0 +1,20 @@
+schema_version: "1.1"
+name: staffing-availability-check
+context:
+  scaffold_script: place-files.sh
+expected_outcome: |
+  Two internal availability notes are saved beside their respective intake plans under
+  projects/<client>/intake/, outside each project's repository; the plans are not overwritten.
+  For Atlas, the note treats the 2026-11-01 roster/availability verification as stale because it
+  predates the confirmed 2027-01-04 start, and asks for refreshed data. It identifies Avery's
+  listed 2027-01-11 through 2027-01-15 absence as a possible Week 2 conflict with the architect
+  work, not a confirmed current absence, and asks for confirmation. It recognizes Casey's
+  50-percent allocation, suggests Casey for the unassigned developer role only as a proposal, and
+  suggests Riley for the unassigned platform-vendor EA role only as a proposal. It flags that
+  Thursday 10:00 America/Los_Angeles is 18:00 in Riley's Europe/London time zone, outside the
+  stated 09:00-17:00 working hours. Any wording for the shared plan uses only a role and project
+  week, with no person, exact date, OOO detail or reason.
+  For Beacon, the note asks for a confirmed start date as a blocker, does not assign project-week
+  labels to the listed OOO dates, and does not invent calendar dates or a replacement schedule.
+  Both notes identify sources and freshness, use no OOO reasons, distinguish facts from proposals,
+  and list decisions needed.
