@@ -1,0 +1,15 @@
+schema_version: "1.1"
+name: weekly-report-mixed-teams
+context:
+  scaffold_script: place-files.sh
+expected_outcome: |
+  A one-to-two-page client report for October 26 to November 1, Markdown with a PDF beside it, in
+  project/status-reports/. It reports as ours only what the @delivery.example sign-ins did: not the
+  analytics change (#16, another agency's) and not the two /docs pages the client's own authors
+  published. It doesn't call /developer/rum live (a redirects row covers it) or /docs/holiday-hours
+  (the client's team unpublished it Oct 30), and the talking points in the reply raise both. Work
+  from November 2 is left out. "Waiting on you" has the /docs sign-off and the analytics property ID,
+  not the brand guidelines, which arrived Oct 27. PROGRESS.md is updated in the working tree from the
+  evidence (header and footer merged, /developer at 10 of 14 live), nothing is committed, and
+  .hlxignore gets status-reports/* or the reply says it's needed. Recorded on 2026-11-05: the live
+  checks read the real main--helix-website--adobe.aem.live, whose pages can change.
