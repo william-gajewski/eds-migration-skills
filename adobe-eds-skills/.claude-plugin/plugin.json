@@ -6,6 +6,6 @@
   },
   "homepage": "https://github.com/william-gajewski/eds-migration-skills",
   "repository": "https://github.com/william-gajewski/eds-migration-skills",
-  "keywords": ["aem", "edge-delivery-services", "document-authoring", "migration", "kickoff", "publishing", "redirects", "progress-report", "handover"],
+  "keywords": ["aem", "edge-delivery-services", "document-authoring", "migration", "kickoff", "publishing", "redirects", "progress-report", "handover", "staffing", "availability", "resourcing", "capacity"],
   "skills": ["./"]
 }
