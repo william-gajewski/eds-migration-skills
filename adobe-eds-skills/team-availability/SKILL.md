@@ -1,14 +1,15 @@
 ---
-name: eds-delivery-planner
-description: Check staffing and availability for an AEM Edge Delivery Services project after project-intake, using its plan and an approved roster and OOO data. Use to validate role assignments, capacity, absence conflicts, meeting availability, or start-blocking gaps.
+name: team-availability
+description: Check whether the team in a project-intake plan is actually available, using an approved roster and out-of-office (OOO) data, for an AEM Edge Delivery Services project. It maps absences to the plan's weeks, checks allocations and open roles, flags meeting times outside attendees' working hours, and writes an internal note kept outside the repository. Use it after project-intake whenever someone asks who is out during the project, whether a role is covered, whether a roster is current, or whether a meeting time works across time zones, even if they only say "is everyone around in January?". It doesn't write the plan; project-intake does.
 ---
 
 # AEM Edge Delivery Services team availability check
 
-Run this skill after `project-intake` has written the work plan. Keep it separate: the intake plan
-is written for sharing, while roster and out-of-office (OOO) information is internal and changes
-often. Check the proposed team and schedule against approved sources; do not make a second project
-plan or promise a delivery date.
+Run this skill after `project-intake` has written the work plan. If there is no intake plan yet,
+say so and suggest running `project-intake` first; do not build one here. Keep it separate: the
+intake plan is written for sharing, while roster and out-of-office (OOO) information is internal
+and changes often. Check the proposed team and schedule against approved sources; do not make a
+second project plan or promise a delivery date.
 
 Re-run this check at least weekly while the project start is upcoming, and whenever the start date,
 assignments, allocations or meeting details change. A new availability check does not require
@@ -24,12 +25,13 @@ rewriting an unchanged intake plan.
    ask for an accessible, sanitized export or authorized connector. Never copy private share links,
    credentials or authorization details into repository files.
 3. Check when the roster and availability were last verified. Treat information as stale if its
-   verification date is more than 30 days before the check, or if it predates the confirmed project
-   start date. Missing or contradictory verification dates mean freshness is unknown. Flag stale or
-   unknown data, do not treat it as confirmation, and ask for an updated source.
+   verification date is more than 30 days before the check. Missing or contradictory verification
+   dates mean freshness is unknown. Flag stale or unknown data, do not treat it as confirmation,
+   and ask for an updated source.
 4. A confirmed project start date is required to map OOO dates to project weeks. If it is missing or
    unconfirmed, ask for it as a blocking question. Do not label absences Week 1, Week 2, or similar.
-   You may still report calendar-date overlaps without assigning project-week labels.
+   You may still list each person's absence dates, and any overlap with dates the plan names (a
+   launch or a milestone), without project-week labels.
 5. Read only the availability information needed for this check. Use OOO dates only, never reasons.
    Do not copy real names, OOO dates or project details into this skill, its templates, or its eval
    inputs. Do not publish or share the internal note.

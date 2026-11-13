@@ -1,0 +1,19 @@
+schema_version: "1.1"
+name: staffing-availability-check
+context:
+  scaffold_script: place-files.sh
+expected_outcome: |
+  An internal availability note beside each intake plan
+  (projects/atlas/intake/atlas-availability-note.md and
+  projects/beacon/intake/beacon-availability-note.md), nothing written inside either project's
+  repository, and neither work plan edited.
+  Atlas: the roster, last verified 11 days before the 2026-11-12 check, is treated as current.
+  Avery's absence (2027-01-11 to 2027-01-15) falls in week 2, counting from the confirmed
+  2027-01-04 start, against the architecture decisions Avery owns, and Avery misses the 2027-01-14
+  meeting. Casey (developer, 50%) and Riley (platform vendor's EA) are suggested for the open roles
+  and marked as proposed. The Thursday 10:00 America/Los_Angeles meeting is 18:00 for Riley in
+  Europe/London, outside 09:00-17:00. Rows offered for the shared plan name only a role and a
+  week, and no absence is given a reason.
+  Beacon: the roster, last verified 2026-09-15, is flagged stale and a refresh is asked for. With
+  no confirmed start date, the note asks for one as a blocking question and puts Taylor's absence
+  in no project week.

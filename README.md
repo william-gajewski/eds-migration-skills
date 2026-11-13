@@ -1,6 +1,6 @@
 # eds-migration-skills
 
-Claude Code plugins by William Gajewski, published as a plugin marketplace named `wgajewski-skills`.
+Claude Code plugins by the Adobe Drago Team, published as a plugin marketplace named `wgajewski-skills`.
 
 | Plugin | For |
 |:--|:--|
@@ -12,12 +12,12 @@ Claude Code plugins by William Gajewski, published as a plugin marketplace named
 |:--|:--|
 | `migration-kickoff` | start a project: check the machine, plan with `project-intake`, add the starter kit to the repository (a short AGENTS.md, a dated project log, LF line endings, smoke, accessibility and Lighthouse checks) and record the legacy site's breakpoints, screenshots and scores on day 1 |
 | `project-intake` | turn a client's documents and a quick survey of their site into a work plan the team can share (purpose, team, scope, gaps and questions, a plan against the usual four weeks, meeting cadence; Markdown and PDF), separate internal notes for the commercial context, and a progress tracker (`PROGRESS.md`) for the repository |
+| `team-availability` | after `project-intake`, check the plan's team against the roster and OOO dates: conflicts by project week, people proposed for open roles, meeting times outside working hours, in an internal note kept out of the repository |
 | `source-parity` | measure how closely a migrated page matches the original at each screen width, and find what to change |
 | `safe-publish` | preview, publish or restore after checking DA, preview and live, and who saved what, with a backup first |
 | `legacy-redirects` | build, check and upload the redirects sheet without hiding pages that have been migrated |
 | `progress-report` | write the client's progress report for the week (or any span) before the call: what our team merged and published, from git and the site's audit log, checked on live, with the milestones from `PROGRESS.md` (Markdown and PDF, plus talking points) |
 | `project-outtake` | write one client-facing handover, every claim checked against the repo, the live site, the configuration and Lighthouse |
-| `eds-delivery-planner` | propose an Adobe EA/Merkle team and week-by-week EDS plan using accessible resourcing and OOO data, while surfacing gaps and risks |
 
 Claude picks a skill when a request matches its description. To call one directly, type
 `/adobe-eds-skills:<skill>`, for example `/adobe-eds-skills:project-intake`.
@@ -125,13 +125,13 @@ claude plugin install adobe-eds-skills@wgajewski-skills
   folder itself, `"skills": ["./"]`).
 - After changing a manifest, run `claude plugin validate .` and `claude plugin validate ./adobe-eds-skills`.
   The only expected warning is the missing `version`.
-- `project-intake`, `project-outtake` and `progress-report` have test cases in their `evals/`
-  folders, in the format `claude plugin eval` reads: a fictional client's email, a handover of a
-  public site, and a fictional project's week (a script builds its git history in a throwaway
-  repository; its audit log is an export, and aem.live's own site stands in for its pages). The
-  other skills' test cases ran against a client's live site, so they're kept outside the
-  repository. Keep eval workspaces (outputs, grading) outside it too; `*-workspace/` folders are
-  ignored.
+- `project-intake`, `project-outtake`, `progress-report` and `team-availability` have test cases
+  in their `evals/` folders, in the format `claude plugin eval` reads: a fictional client's email, a
+  handover of a public site, a fictional project's week (a script builds its git history in a
+  throwaway repository; its audit log is an export, and aem.live's own site stands in for its
+  pages), and two fictional intake plans with their rosters. The other skills' test cases ran
+  against a client's live site, so they're kept outside the repository. Keep eval workspaces
+  (outputs, grading) outside it too; `*-workspace/` and `evals/results/` folders are ignored.
 
 ## Keep client material out
 

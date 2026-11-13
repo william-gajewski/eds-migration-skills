@@ -1,6 +1,7 @@
-# Eval workspaces: outputs and grading from skill test runs (claude plugin eval writes evals/results/)
+# Eval workspaces: outputs and grading from skill test runs (claude plugin eval writes
+# <eval dir>/results/, which can sit at any depth, such as a skill's own evals/ folder)
 *-workspace/
-evals/results/
+**/evals/results/
 # Client-derived material kept next to a skill for local use only
 private/
 node_modules/
