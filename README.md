@@ -10,6 +10,7 @@ Claude Code plugins by William Gajewski, published as a plugin marketplace named
 
 | Skill | Use it to |
 |:--|:--|
+| `eds-block-discovery` | discover and consolidate a site's EDS blocks, count unique implementations separately from occurrences and variations, map blocks to pages, and estimate effort |
 | `migration-kickoff` | start a project: check the machine, plan with `project-intake`, add the starter kit to the repository (a short AGENTS.md, a dated project log, LF line endings, smoke, accessibility and Lighthouse checks) and record the legacy site's breakpoints, screenshots and scores on day 1 |
 | `project-intake` | turn a client's documents and a quick survey of their site into a work plan the team can share (purpose, team, scope, gaps and questions, a plan against the usual four weeks, meeting cadence; Markdown and PDF), separate internal notes for the commercial context, and a progress tracker (`PROGRESS.md`) for the repository |
 | `source-parity` | measure how closely a migrated page matches the original at each screen width, and find what to change |
