@@ -5,11 +5,13 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 
-const USER_AGENT = 'EDSBlockDiscovery/1.0 (+https://www.aem.live/)';
+const USER_AGENT_TOKEN = 'eds-migration-skills-block-discovery';
+const USER_AGENT = `${USER_AGENT_TOKEN}/1.0 (+https://github.com/william-gajewski)`;
 const MAX_BYTES = 5_000_000;
-const QUERY_CONTENT_KEYS = new Set(['id', 'lang', 'locale', 'page', 'q', 'category']);
+const QUERY_CONTENT_KEYS = new Set(['id', 'lang', 'locale', 'page', 'q', 'category', 'plan']);
 
 function normalizeUrl(value) {
   let url;
@@ -74,8 +76,11 @@ function inspectHtml(html) {
   const titleParts = [];
   const links = [];
   const sections = [];
+  const componentClasses = new Set();
+  const classCounts = new Map();
+  const sectionStack = [];
+  let inHead = false;
   let titleDepth = 0;
-  let activeSection = null;
   let rawTextTag = null;
   let canonical = null;
   let cursor = 0;
@@ -83,10 +88,10 @@ function inspectHtml(html) {
   const addText = (raw) => {
     const text = decodeEntities(raw).trim();
     if (!text) return;
-    if (titleDepth) titleParts.push(text);
-    if (activeSection) {
-      activeSection.text.push(text);
-      if (activeSection.headingDepth) activeSection.heading += `${text} `;
+    if (titleDepth && inHead) titleParts.push(text);
+    for (const section of sectionStack) {
+      section.text.push(text);
+      if (section.headingDepth) section.heading += `${text} `;
     }
   };
 
@@ -136,36 +141,49 @@ function inspectHtml(html) {
     const tag = match[1].toLowerCase();
 
     if (closing) {
+      if (tag === 'head') inHead = false;
       if (tag === 'title' && titleDepth) titleDepth -= 1;
-      if (activeSection) {
-        if (/^h[1-6]$/.test(tag)) {
-          activeSection.headingDepth = Math.max(0, activeSection.headingDepth - 1);
-        } else if (tag === activeSection.tag) {
-          activeSection.heading = activeSection.heading.replace(/\s+/g, ' ').trim();
-          activeSection.text = activeSection.text.join(' ').replace(/\s+/g, ' ').trim().slice(0, 500);
-          delete activeSection.headingDepth;
-          sections.push(activeSection);
-          activeSection = null;
+      if (/^h[1-6]$/.test(tag)) {
+        for (const section of sectionStack) {
+          section.headingDepth = Math.max(0, section.headingDepth - 1);
+        }
+      }
+      const sectionIndex = sectionStack.map((section) => section.tag).lastIndexOf(tag);
+      if (sectionIndex !== -1) {
+        const closed = sectionStack.splice(sectionIndex);
+        for (const section of closed) {
+          section.heading = section.heading.replace(/\s+/g, ' ').trim();
+          section.text = section.text.join(' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+          delete section.headingDepth;
+          sections.push(section);
         }
       }
       continue;
     }
 
     const attrs = parseAttributes(token.slice(match[0].length));
+    if (tag === 'head') inHead = true;
     if (tag === 'title') titleDepth += 1;
-    if (tag === 'link' && attrs.rel?.toLowerCase() === 'canonical') {
+    if (inHead && tag === 'link' && attrs.rel?.toLowerCase() === 'canonical') {
       canonical = attrs.href || null;
     }
     if (tag === 'a' && attrs.href) links.push(attrs.href);
 
-    if (activeSection) {
-      if (tag === 'img') activeSection.image_count += 1;
-      else if (tag === 'a') activeSection.link_count += 1;
-      else if (tag === 'video' || tag === 'iframe') activeSection.media_count += 1;
-      else if (/^h[1-6]$/.test(tag)) activeSection.headingDepth += 1;
+    for (const className of (attrs.class || '').split(/\s+/).filter(Boolean)) {
+      classCounts.set(className, (classCounts.get(className) || 0) + 1);
+      if (/^cmp-/i.test(className)) componentClasses.add(className);
     }
-    if ((tag === 'section' || tag === 'article') && !activeSection) {
-      activeSection = {
+
+    if (tag === 'img' || tag === 'a' || tag === 'video' || tag === 'iframe' || /^h[1-6]$/.test(tag)) {
+      for (const section of sectionStack) {
+        if (tag === 'img') section.image_count += 1;
+        else if (tag === 'a') section.link_count += 1;
+        else if (tag === 'video' || tag === 'iframe') section.media_count += 1;
+        else section.headingDepth += 1;
+      }
+    }
+    if (tag === 'section' || tag === 'article') {
+      sectionStack.push({
         tag,
         classes: (attrs.class || '').split(/\s+/).filter(Boolean),
         label: attrs['aria-label'] || attrs['data-block-name'] || null,
@@ -175,7 +193,7 @@ function inspectHtml(html) {
         link_count: 0,
         media_count: 0,
         headingDepth: 0,
-      };
+      });
     }
 
     if (tag === 'script' || tag === 'style') rawTextTag = tag;
@@ -186,6 +204,8 @@ function inspectHtml(html) {
     canonical,
     links,
     sections,
+    component_classes: [...componentClasses].sort(),
+    class_counts: Object.fromEntries([...classCounts].sort(([a], [b]) => a.localeCompare(b))),
   };
 }
 
@@ -221,22 +241,92 @@ function contentType(response) {
   return (response.headers.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
 }
 
-async function fetchResource(url, timeout) {
-  const response = await fetch(url, {
-    headers: { 'User-Agent': USER_AGENT },
-    signal: AbortSignal.timeout(timeout * 1000),
-  });
-  if (!response.ok) throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
-  const type = contentType(response);
-  const body = await responseBody(response);
-  return { finalUrl: response.url, status: response.status, contentType: type, body };
+function charsetFromResponse(response) {
+  const value = response.headers.get('content-type') || '';
+  return value.match(/;\s*charset\s*=\s*"?([^;"\s]+)/i)?.[1] || 'utf-8';
+}
+
+function inScope(url, originHost, pathPrefix) {
+  const candidate = new URL(url);
+  return candidate.host.toLowerCase() === originHost.toLowerCase()
+    && isWithinPathPrefix(url, pathPrefix);
+}
+
+async function fetchResource(url, timeout, {
+  limiter = null,
+  robot = null,
+  originHost = new URL(url).host,
+  pathPrefix = null,
+  bodyTypes = null,
+  maxRedirects = 10,
+} = {}) {
+  let requestUrl = url;
+  for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
+    if (!inScope(requestUrl, originHost, pathPrefix)) {
+      throw new Error(`redirect or resource is outside crawl scope: ${requestUrl}`);
+    }
+    if (robot && !robotsCanFetch(robot, requestUrl)) {
+      throw new Error(`disallowed by robots.txt: ${requestUrl}`);
+    }
+    if (limiter) await limiter.wait();
+    const response = await fetch(requestUrl, {
+      headers: { 'User-Agent': USER_AGENT },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeout * 1000),
+    });
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      await response.body?.cancel();
+      if (!location) throw new Error(`HTTP redirect ${response.status} without a Location header`);
+      if (redirects === maxRedirects) throw new Error(`too many redirects from ${url}`);
+      requestUrl = new URL(location, requestUrl).href;
+      continue;
+    }
+    if (!response.ok) {
+      const error = new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+      error.status = response.status;
+      error.retryAfter = response.headers.get('retry-after');
+      await response.body?.cancel();
+      throw error;
+    }
+
+    const type = contentType(response);
+    if (bodyTypes && !bodyTypes.has(type)) {
+      await response.body?.cancel();
+      return {
+        finalUrl: requestUrl,
+        status: response.status,
+        contentType: type,
+        charset: charsetFromResponse(response),
+        body: new Uint8Array(),
+      };
+    }
+    const body = await responseBody(response);
+    return {
+      finalUrl: requestUrl,
+      status: response.status,
+      contentType: type,
+      charset: charsetFromResponse(response),
+      body,
+    };
+  }
+  throw new Error(`too many redirects from ${url}`);
 }
 
 class RateLimiter {
   constructor(interval) {
     this.interval = interval;
     this.nextRequest = 0;
+    this.lastRequest = null;
     this.lock = Promise.resolve();
+  }
+
+  setInterval(interval) {
+    this.interval = interval;
+    if (this.lastRequest !== null) {
+      this.nextRequest = Math.max(this.nextRequest, this.lastRequest + interval);
+    }
   }
 
   async wait() {
@@ -246,6 +336,7 @@ class RateLimiter {
     await previous;
     const now = performance.now() / 1000;
     const scheduled = Math.max(now, this.nextRequest);
+    this.lastRequest = scheduled;
     this.nextRequest = scheduled + this.interval;
     release();
     const delay = scheduled - now;
@@ -295,8 +386,9 @@ function parseRobots(text, status = 200) {
 }
 
 function applicableRobotsGroup(robot) {
-  const agent = USER_AGENT.toLowerCase();
-  const matching = robot.groups.filter((entry) => entry.agents.some((name) => name && name !== '*' && agent.includes(name)));
+  const matching = robot.groups.filter((entry) => (
+    entry.agents.some((name) => name && name !== '*' && USER_AGENT_TOKEN.includes(name))
+  ));
   if (matching.length) {
     return {
       rules: matching.flatMap((entry) => entry.rules),
@@ -315,12 +407,7 @@ function robotsCanFetch(robot, value) {
   if (robot.allowAll) return true;
   const { rules } = applicableRobotsGroup(robot);
   const url = new URL(value);
-  let target;
-  try {
-    target = encodeURIComponent(decodeURIComponent(`${url.pathname}${url.search}`)).replace(/%2F/gi, '/');
-  } catch {
-    target = `${url.pathname}${url.search}`;
-  }
+  const target = `${url.pathname}${url.search}`;
   const matching = [];
   for (const rule of rules) {
     let pattern = rule.path;
@@ -336,9 +423,18 @@ function robotsCanFetch(robot, value) {
   return matching.length ? matching.at(-1).allow : true;
 }
 
-async function inspectPage(url, timeout, limiter) {
-  await limiter.wait();
-  const response = await fetchResource(url, timeout);
+function decodeHtml(body, charset) {
+  return new TextDecoder(charset).decode(body);
+}
+
+async function inspectPage(url, timeout, limiter, robot, originHost, pathPrefix) {
+  const response = await fetchResource(url, timeout, {
+    limiter,
+    robot,
+    originHost,
+    pathPrefix,
+    bodyTypes: new Set(['text/html', 'application/xhtml+xml']),
+  });
   const page = {
     url,
     final_url: normalizeUrl(response.finalUrl) || response.finalUrl,
@@ -347,13 +443,17 @@ async function inspectPage(url, timeout, limiter) {
     title: '',
     canonical: null,
     sections: [],
+    component_classes: [],
+    class_counts: {},
   };
   let links = [];
-  if (response.contentType === 'text/html') {
-    const parsed = inspectHtml(new TextDecoder().decode(response.body));
+  if (response.contentType === 'text/html' || response.contentType === 'application/xhtml+xml') {
+    const parsed = inspectHtml(decodeHtml(response.body, response.charset));
     page.title = parsed.title;
     if (parsed.canonical) page.canonical = normalizeUrl(new URL(parsed.canonical, response.finalUrl).href);
     page.sections = parsed.sections;
+    page.component_classes = parsed.component_classes;
+    page.class_counts = parsed.class_counts;
     links = parsed.links.flatMap((href) => {
       try {
         return [new URL(href, response.finalUrl).href];
@@ -366,35 +466,109 @@ async function inspectPage(url, timeout, limiter) {
 }
 
 function retryableFailure(failure) {
-  const error = failure.error || '';
-  if (error.includes('disallowed by robots.txt') || error.includes('response exceeds')) return false;
-  if (error.startsWith('HTTP Error ')) {
-    const status = Number(error.split(/\s+/)[2]?.replace(':', ''));
-    return status === 408 || status === 429 || status >= 500;
+  const error = typeof failure === 'string' ? failure : failure.message || failure.error || '';
+  if (error.includes('disallowed by robots.txt')
+      || error.includes('outside crawl scope')
+      || error.includes('response exceeds')) return false;
+  const status = failure.status ?? Number(error.match(/^HTTP Error (\d+)/)?.[1]);
+  return status === 408 || status === 429 || status >= 500 || !status;
+}
+
+function retryDelay(error, attempt) {
+  const retryAfter = error.retryAfter;
+  if (retryAfter && /^\d+(?:\.\d+)?$/.test(retryAfter)) {
+    return Math.min(Number(retryAfter), 60) * 1000;
   }
-  return true;
+  const retryDate = retryAfter ? Date.parse(retryAfter) : Number.NaN;
+  if (Number.isFinite(retryDate)) return Math.max(0, Math.min(retryDate - Date.now(), 60_000));
+  return Math.min(30, 2 ** (attempt - 1)) * 1000;
+}
+
+async function withRetries(operation, retries, priorAttempts = 0) {
+  let lastError;
+  let usedAttempts = 0;
+  for (let attempt = 1; attempt <= retries + 1; attempt += 1) {
+    usedAttempts = attempt;
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt > retries || !retryableFailure(error)) break;
+      await new Promise((resolve) => setTimeout(resolve, retryDelay(error, attempt)));
+    }
+  }
+  lastError.attempts = priorAttempts + usedAttempts;
+  throw lastError;
+}
+
+async function inspectPageWithRetries(url, args, limiter, robot, originHost, priorAttempts = 0) {
+  return withRetries(
+    () => inspectPage(url, args.timeout, limiter, robot, originHost, args.pathPrefix),
+    args.retries,
+    priorAttempts,
+  );
 }
 
 function decodeXml(value) {
   return decodeEntities(value);
 }
 
-async function sitemapLocations(value, timeout, seen = new Set(), depth = 0) {
-  if (seen.has(value) || depth > 3) return [];
+function decodeSitemapBody(body, url, type) {
+  let bytes = body;
+  if (new URL(url).pathname.toLowerCase().endsWith('.gz')
+      || type === 'application/gzip' || type === 'application/x-gzip') {
+    bytes = gunzipSync(bytes, { maxOutputLength: MAX_BYTES });
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+async function sitemapLocations(value, {
+  timeout,
+  limiter,
+  robot,
+  originHost,
+  failures,
+  retries,
+  seen = new Set(),
+  depth = 0,
+}) {
+  if (depth > 3) {
+    failures.push({ url: value, error: 'sitemap nesting exceeds maximum depth 3', kind: 'sitemap' });
+    return [];
+  }
+  if (seen.has(value)) return [];
   seen.add(value);
   try {
-    const response = await fetchResource(value, timeout);
-    const text = new TextDecoder().decode(response.body);
-    if (!['application/xml', 'text/xml'].includes(response.contentType) && !text.trimStart().startsWith('<')) return [];
+    const response = await withRetries(
+      () => fetchResource(value, timeout, { limiter, robot, originHost }),
+      retries,
+    );
+    const text = decodeSitemapBody(response.body, value, response.contentType);
+    if (!['application/xml', 'text/xml', 'application/gzip', 'application/x-gzip'].includes(response.contentType)
+        && !text.trimStart().startsWith('<')) {
+      throw new Error(`unexpected sitemap content type: ${response.contentType || '(missing)'}`);
+    }
     const rootTag = text.match(/<\s*(?:[\w.-]+:)?(sitemapindex|urlset)\b/i)?.[1]?.toLowerCase();
+    if (!rootTag) throw new Error('sitemap has no sitemapindex or urlset root element');
     const locations = [...text.matchAll(/<(?:[\w.-]+:)?loc\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?loc\s*>/gi)]
       .map((match) => decodeXml(match[1].trim()));
     if (rootTag === 'sitemapindex') {
-      const nested = await Promise.all(locations.map((location) => sitemapLocations(location, timeout, seen, depth + 1)));
-      return nested.flat();
+      const nested = [];
+      for (const location of locations) {
+        nested.push(...await sitemapLocations(location, {
+          timeout, limiter, robot, originHost, failures, retries, seen, depth: depth + 1,
+        }));
+      }
+      return nested;
     }
     return locations.map(normalizeUrl).filter(Boolean);
-  } catch {
+  } catch (error) {
+    failures.push({
+      url: value,
+      error: error.message,
+      attempts: error.attempts || 1,
+      kind: 'sitemap',
+    });
     return [];
   }
 }
@@ -408,8 +582,8 @@ function usage() {
     '  --delay <seconds>     Minimum seconds between request starts (default: 1)',
     '  --workers <n>         Maximum concurrent page requests (default: 4)',
     '  --path-prefix <path>  Restrict crawling to a URL path and its descendants',
-    '  --progress-every <n>  Progress/checkpoint interval (default: 25)',
-    '  --retries <n>         Transient retries when resuming (default: 1)',
+    '  --progress-every <n>  Progress/checkpoint interval (default: 250)',
+    '  --retries <n>         Transient retries per run (default: 1)',
     '  --timeout <seconds>   Per-request timeout (default: 15)',
     '  --out <path>          Output JSON file (default: stdout)',
     '  --resume              Resume an incomplete JSON output file',
@@ -422,7 +596,7 @@ function parseArgs(argv) {
     maxPages: 500,
     delay: 1,
     workers: 4,
-    progressEvery: 25,
+    progressEvery: 250,
     retries: 1,
     timeout: 15,
     pathPrefix: null,
@@ -507,25 +681,55 @@ function writeResult(result, outputPath) {
   fs.renameSync(temporaryPath, outputPath);
 }
 
+async function fetchRobots(url, timeout, originHost, limiter) {
+  let requestUrl = url;
+  for (let redirects = 0; redirects <= 10; redirects += 1) {
+    if (new URL(requestUrl).host.toLowerCase() !== originHost.toLowerCase()) {
+      throw new Error(`robots.txt redirect is outside the site host: ${requestUrl}`);
+    }
+    await limiter.wait();
+    const response = await fetch(requestUrl, {
+      headers: { 'User-Agent': USER_AGENT },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeout * 1000),
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      await response.body?.cancel();
+      if (!location) throw new Error(`robots.txt redirect ${response.status} without a Location header`);
+      if (redirects === 10) throw new Error('too many redirects fetching robots.txt');
+      requestUrl = new URL(location, requestUrl).href;
+      continue;
+    }
+    if (response.status === 404 || response.status === 401 || response.status === 403) {
+      await response.body?.cancel();
+      return parseRobots('', response.status);
+    }
+    if (!response.ok) {
+      const error = new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+      error.status = response.status;
+      error.retryAfter = response.headers.get('retry-after');
+      await response.body?.cancel();
+      throw error;
+    }
+    return parseRobots(new TextDecoder().decode(await responseBody(response)), response.status);
+  }
+  throw new Error('too many redirects fetching robots.txt');
+}
+
 async function crawl(args) {
   const start = args.start;
   const parts = new URL(start);
   const origin = parts.origin;
   const robotsUrl = `${origin}/robots.txt`;
+  const limiter = new RateLimiter(args.delay);
   let robot;
   let robotsError = null;
   try {
-    const response = await fetch(robotsUrl, {
-      headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(args.timeout * 1000),
-    });
-    if (!response.ok && response.status !== 404 && response.status !== 401 && response.status !== 403) {
-      throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
-    }
-    const text = response.status === 404 || response.status === 401 || response.status === 403
-      ? ''
-      : new TextDecoder().decode(await responseBody(response));
-    robot = parseRobots(text, response.status);
+    robot = await withRetries(
+      () => fetchRobots(robotsUrl, args.timeout, parts.host, limiter),
+      args.retries,
+    );
   } catch (error) {
     robotsError = error.message;
     writeResult({
@@ -533,17 +737,29 @@ async function crawl(args) {
       generated_at: new Date().toISOString(),
       max_pages: args.maxPages,
       pages: [],
-      failures: [{ url: robotsUrl, error: robotsError }],
+      failures: [{ url: robotsUrl, error: robotsError, attempts: error.attempts || 1 }],
       complete: false,
     }, args.out);
-    return 0;
+    return 1;
   }
 
   const robotsGroup = applicableRobotsGroup(robot);
   const crawlDelay = robotsGroup.crawlDelays.length ? Math.max(...robotsGroup.crawlDelays) : 0;
+  limiter.setInterval(Math.max(args.delay, crawlDelay));
   const sitemapUrls = robot.sitemaps.length ? robot.sitemaps : [`${origin}/sitemap.xml`];
-  const seeds = (await Promise.all(sitemapUrls.map((url) => sitemapLocations(url, args.timeout))))
-    .flat()
+  const sitemapFailures = [];
+  const sitemapSeeds = [];
+  for (const url of sitemapUrls) {
+    sitemapSeeds.push(...await sitemapLocations(url, {
+      timeout: args.timeout,
+      limiter,
+      robot,
+      originHost: parts.host,
+      failures: sitemapFailures,
+      retries: args.retries,
+    }));
+  }
+  const seeds = sitemapSeeds
     .filter((url) => {
       const candidate = new URL(url);
       return candidate.host.toLowerCase() === parts.host.toLowerCase()
@@ -551,7 +767,7 @@ async function crawl(args) {
     });
   const queueSet = new Set([start, ...seeds]);
   const pages = [];
-  let failures = [];
+  let failures = [...sitemapFailures];
   const visited = new Set();
   const attempts = new Map();
   let queue = [...queueSet];
@@ -565,7 +781,7 @@ async function crawl(args) {
     }
     if (previous.start_url !== start) throw new Error('The resume file belongs to a different start URL');
     pages.push(...(previous.pages || []));
-    failures = previous.failures || [];
+    failures = [...sitemapFailures, ...(previous.failures || []).filter((failure) => failure.kind !== 'sitemap')];
     for (const url of previous.visited_urls || []) visited.add(url);
     for (const failure of failures) attempts.set(failure.url, failure.attempts || 1);
 
@@ -578,7 +794,7 @@ async function crawl(args) {
     for (const url of resumeUrls) queueSet.add(url);
     for (const url of resumeUrls) visited.delete(url);
     for (const failure of failures) {
-      if (retryableFailure(failure) && (attempts.get(failure.url) || 1) <= args.retries) {
+      if (retryableFailure(failure)) {
         visited.delete(failure.url);
         queueSet.add(failure.url);
       }
@@ -589,7 +805,6 @@ async function crawl(args) {
     queue = [...queueSet].filter((url) => !visited.has(url));
   }
 
-  const limiter = new RateLimiter(Math.max(args.delay, crawlDelay));
   const pending = new Map();
   let outcomesSinceCheckpoint = 0;
   while (queue.length || pending.size) {
@@ -610,7 +825,9 @@ async function crawl(args) {
         outcomesSinceCheckpoint += 1;
         continue;
       }
-      const task = inspectPage(url, args.timeout, limiter);
+      const task = inspectPageWithRetries(
+        url, args, limiter, robot, parts.host, attempts.get(url) || 0,
+      );
       pending.set(task, url);
     }
 
@@ -623,9 +840,13 @@ async function crawl(args) {
     pending.delete(completed.task);
     if (completed.error) {
       const attemptsForUrl = (attempts.get(url) || 0) + 1;
-      attempts.set(url, attemptsForUrl);
+      attempts.set(url, completed.error.attempts || attemptsForUrl);
       failures = failures.filter((failure) => failure.url !== url);
-      failures.push({ url, error: completed.error.message, attempts: attemptsForUrl });
+      failures.push({
+        url,
+        error: completed.error.message,
+        attempts: completed.error.attempts || attemptsForUrl,
+      });
     } else {
       pages.push(completed.value.page);
       failures = failures.filter((failure) => failure.url !== url);
@@ -662,7 +883,7 @@ async function crawl(args) {
   const result = buildResult(
     start, args.maxPages, robotsUrl, robotsError, sitemapUrls,
     pages, failures, queue, pending, visited,
-    !queue.length && !pending.size && visited.size < args.maxPages,
+    !queue.length && !pending.size && visited.size < args.maxPages && !failures.length,
   );
   writeResult(result, args.out);
   return 0;
@@ -687,6 +908,17 @@ export async function main(argv = process.argv.slice(2)) {
     return 1;
   }
 }
+
+export {
+  applicableRobotsGroup,
+  decodeSitemapBody,
+  fetchResource,
+  inspectHtml,
+  inspectPageWithRetries,
+  normalizeUrl,
+  parseRobots,
+  robotsCanFetch,
+};
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   process.exitCode = await main();

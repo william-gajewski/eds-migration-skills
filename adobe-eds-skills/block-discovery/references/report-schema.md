@@ -1,57 +1,65 @@
 # Block discovery working schema
 
 Use this shape internally when preparing the two user-facing deliverables: the Markdown discovery
-report and the block inventory CSV. Do not create a separate JSON deliverable unless requested.
-Keep counts distinct: a block's `occurrence_count` and `variations` never increase
-`summary.unique_custom_blocks`. Page records and page-to-block mappings are working evidence and
-are intentionally omitted from exported deliverables.
+report and block inventory CSV. Keep the crawl JSON and page-to-block mapping alongside them as
+working evidence outside the repositories; do not emit them as additional reports.
+
+The custom block count includes only rows whose `implementation_status` is `custom`. Occurrences,
+variations, Adobe/project reuse, global structures, and standard content are separate. A missing
+count is `null` with `occurrence_method` set to `unverified`; it is never zero to mean unknown.
 
 ```json
 {
   "site": {
     "start_url": "https://www.example.com/",
-    "scope": "Entire host",
+    "scope": "Approved /section/ path",
+    "authorization": "Approved by site owner on YYYY-MM-DD",
     "generated_at": "YYYY-MM-DD",
-    "crawl_limit": 500,
+    "pages_discovered": 0,
+    "pages_sampled": 0,
     "coverage_percent": 0,
+    "sampling_method": "Sitemap counts, grouped by template; two representative pages per group",
     "notes": []
   },
   "summary": {
-    "pages_discovered": 0,
-    "pages_inspected": 0,
     "unique_custom_blocks": 0,
-    "block_occurrences": 0,
-    "block_variations": 0,
-    "global_structures": [],
-    "standard_eds_structures": [],
-    "existing_blocks_reused": [],
-    "effort_developer_days": {
-      "low": 0,
-      "likely": 0,
-      "high": 0
+    "occurrences": {
+      "verified_placements": 0,
+      "estimated_page_appearances": 0,
+      "unverified_blocks": 1
     },
-    "estimate_type": "greenfield"
+    "custom_block_variations": 0,
+    "adobe_blocks_reused": [],
+    "project_blocks_reused": [],
+    "global_structures": [],
+    "standard_eds_structures": []
   },
   "blocks": [
     {
       "id": "hero",
       "name": "hero",
       "category": "content",
+      "implementation_status": "adobe-reuse",
+      "existing_block": "Block Collection hero",
       "purpose": "Primary page introduction",
       "authoring_model": [],
       "variations": [],
-      "occurrence_count": 0,
+      "occurrence_count": null,
+      "occurrence_method": "unverified",
       "complexity": "medium",
-      "effort_developer_days": {
-        "low": 2,
-        "likely": 3,
-        "high": 4
-      },
       "javascript_or_integrations": [],
-      "confidence": "high",
+      "confidence": "medium",
       "evidence_pages": [],
-      "existing_project_block": null,
       "notes": []
+    }
+  ],
+  "page_to_block_evidence": [
+    {
+      "canonical_page": "https://www.example.com/",
+      "archetype": "home",
+      "inspected": true,
+      "block_ids": ["hero"],
+      "evidence": "Observed .cmp-hero in the main content"
     }
   ],
   "consolidation_decisions": [
@@ -62,11 +70,9 @@ are intentionally omitted from exported deliverables.
       "confidence": "high"
     }
   ],
-  "risks_and_questions": [],
-  "effort_assumptions": [],
-  "implementation_sequence": []
+  "risks_and_questions": []
 }
 ```
 
-For partial audits, describe what was not inspected in `site.notes` and report coverage below 100%.
-Use `null` or an empty array when information is unknown; do not invent evidence or estimates.
+For partial audits, report the sample and exclusions, and keep coverage below 100%. Cite source
+page URLs rather than internal repository paths. Do not invent counts, evidence, or capabilities.

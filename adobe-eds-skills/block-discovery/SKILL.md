@@ -1,230 +1,183 @@
 ---
-name: eds-block-discovery
-description: Analyze an existing website for an Adobe Experience Manager Edge Delivery Services migration. Discover pages, inspect page sections and recurring patterns, consolidate them into a reusable block inventory, map blocks to pages, and estimate implementation effort. Use when asked to assess a website, count EDS blocks/components, plan an EDS migration, or produce a block inventory.
+name: block-discovery
+description: After project-intake and before block implementation, identify the reusable EDS block candidates a source site requires, distinguish Adobe or project blocks from custom work, and produce an evidence-backed block inventory. Use when asked how many blocks a site migration needs or which blocks should be built.
 ---
 
-# EDS Block Discovery
+# Block Discovery
 
 ## Purpose
 
-Produce an evidence-based estimate of the **unique custom EDS blocks** needed to migrate a
-website. Analyze the whole in-scope site, not just its homepage. Optimize for the smallest
-maintainable block set without hiding genuinely different structures or behaviors inside one
-overly generic block.
+Determine the smallest maintainable set of custom blocks needed to migrate a website to AEM
+Edge Delivery Services (EDS). This skill follows `project-intake` and informs implementation
+planning; it does not create blocks, migrate content, or estimate cost, duration, or developer-days.
 
-This skill is for discovery and estimation. It does not automatically implement blocks or migrate
-content unless separately requested.
+Count custom blocks separately from their occurrences, variations, Adobe-provided blocks, project
+blocks, global structures, and standard document content. Never call a sample-based result a
+complete site audit.
 
 ## Inputs
 
 Required:
-- Public website URL or an accessible local site export.
+- A public website URL.
 
 Optional:
-- Sitemap URL/XML, explicit URL list, page exclusions, authenticated browser session, screenshots,
-  design files, existing EDS repository, existing block library, authoring requirements, target
-  breakpoints, and migration constraints.
+- Confirmed site scope, sitemap URL/XML, URL list, page exclusions, authenticated browser session,
+  screenshots, design files, existing EDS repository or block library, authoring requirements,
+  target breakpoints, and migration constraints.
 
-If the user has not specified the scope, ask whether the analysis should cover the entire domain or
-a section/subdirectory. Do not ask for information that can be discovered safely from the site.
+The inventory helper accepts HTTP(S) URLs only; do not promise that it crawls local folders. If
+scope or authorization for automated requests is unclear, clarify it before crawling.
 
 ## Workflow
 
-### 1. Establish scope and evidence
+### 1. Agree on scope and request budget
 
-1. Normalize the starting URL and identify the canonical host.
-2. Find `robots.txt`, sitemap references, sitemap indexes, and XML sitemaps where accessible.
-3. Discover internal links from navigation, footer, and page content if a sitemap is absent or
-   incomplete.
-4. Respect robots directives, access controls, rate limits, and the user's stated exclusions. Do
-   not attempt to bypass authentication, paywalls, bot protections, or access restrictions.
-5. Record redirects, canonical URLs, HTTP status, fetch failures, and pages excluded from scope.
-6. Deduplicate URLs by normalized canonical URL; retain meaningful query parameters only when they
-   represent distinct content.
-7. Report crawl limits and coverage. A partial crawl must never be described as a complete site
-   audit.
+1. Normalize the starting URL and identify the canonical host and requested section.
+2. Confirm with the user or site owner that automated requests are allowed, especially before a
+   full-site crawl. Agree on the host, path, request/page limit, and any exclusions. Do not infer
+   permission to crawl thousands of production URLs from a request to inventory blocks.
+3. Check `robots.txt`, its sitemap references, and sitemap indexes. Respect robots rules, crawl
+   delay, access controls, and the agreed request budget. Do not bypass authentication, paywalls,
+   bot protections, or access restrictions.
+4. By default, use sitemap counts and a representative sample of pages grouped by page template.
+   Crawl more pages only when the agreed scope and budget justify it. Clearly report redirects,
+   canonical aliases, failures, exclusions, sample size, and coverage.
+5. Deduplicate pages by normalized canonical URL. Keep query parameters only when they represent
+   distinct content.
 
-Use `scripts/site_inventory.mjs` as a first-pass inventory helper:
+For an approved crawl, use `scripts/site_inventory.mjs` as a first-pass inventory helper:
 
 ```bash
 node <skill>/scripts/site_inventory.mjs https://www.example.com \
-  --max-pages 500 --workers 4 --path-prefix /section/ \
-  --out <work-dir>/site-inventory.json
+  --max-pages 500 --workers 4 --delay 1 --path-prefix /section/ \
+  --out <projects>/<client>/discovery/site-inventory.json
 ```
 
-The helper is a polite, same-host, public-page crawler. It follows robots.txt, sitemap URLs, and
-internal links up to the page limit and records page metadata and semantic section observations.
-Use `--path-prefix` to keep sitemap seeds and discovered links within a requested subdirectory.
-`--workers` bounds concurrent fetches; `--delay` is the minimum time between request starts and is
-increased when robots.txt specifies a longer crawl delay. When writing to a file, the helper
-periodically saves an atomic, resumable checkpoint. If interrupted, continue with the same URL and
-output path plus `--resume`; transient failures are retried up to `--retries` times (default one).
-It does not execute JavaScript, authenticate, or establish that a site is fully covered. Inspect
-the output and use browser inspection for rendered or interactive content.
-Treat this JSON as temporary working data, not a deliverable. Remove it and other crawl scratch
-files after producing the final report and block inventory.
+The crawler stays on the starting host, checks robots rules on requests and redirects, honors the
+longer of `--delay` and robots `Crawl-delay`, and defaults to at most one request start per second.
+It reads only HTML page bodies, caps response bodies at 5 MB, records sitemap failures, retries
+transient fetch failures during the run, and saves an atomic checkpoint every 250 outcomes. Resume
+an interrupted crawl with the same arguments plus `--resume`. Sitemaps can be nested and gzip
+compressed. The helper does not execute JavaScript or establish complete coverage.
+Its page evidence includes class-token element counts from the fetched HTML. Use these as markup
+signals for occurrence analysis only after validating the class-to-block mapping on representative
+rendered pages; do not treat arbitrary CSS classes or repeated card items as block placements.
 
-### 2. Inspect pages and page archetypes
+Keep the crawl JSON and the page-to-block evidence map as working evidence next to the deliverables,
+outside the repository. Do not delete them after analysis: they support verification of the counts.
+They are not additional user-facing reports.
 
-For every in-scope page, inspect:
-- title, canonical URL, page type/archetype, and primary navigation path;
-- header, navigation, footer, breadcrumbs, and global notices;
-- ordered content sections and their DOM/semantic structure;
-- headings, text, images, video, links, cards, lists, tables, forms, and embeds;
-- interactive behavior: tabs, accordions, carousels, menus, filters, search, modals, pagination,
-  and forms;
-- responsive differences at representative desktop, tablet, and mobile widths;
-- accessibility semantics, keyboard behavior, and meaningful ARIA attributes;
-- external services, APIs, analytics-dependent UI, and other integration dependencies.
+### 2. Sample page templates
 
-Prefer rendered browser inspection (for example, Playwright or an available browser agent) for
-JavaScript-rendered pages and interactive behavior. Use screenshots and DOM evidence together. Do
-not infer functionality from appearance alone.
+1. Use sitemap URL counts and available page metadata to group pages into archetypes such as home,
+   landing, product, article, listing, detail, campaign, contact, and utility.
+2. Select a few representative pages from each archetype, including materially different layouts,
+   interaction patterns, and edge cases. Record the selection method and any unsampled groups.
+3. Inspect those pages in a browser when possible. Check the header, navigation, footer, ordered
+   content sections, media, forms, interactions, and representative responsive states.
+4. Do not claim a section, behavior, or component was observed on pages that were not inspected.
+   Extrapolate only from a stated pattern and label the inference and confidence.
 
-Group pages into archetypes such as home, landing, product, article, listing, detail, campaign,
-contact, and utility. These are page templates, not automatically EDS blocks.
+### 3. Identify candidates and retain evidence
 
-### 3. Identify block candidates
+For each distinct authorable section, capture:
+- observed name/purpose and candidate content model;
+- canonical evidence page URL and page archetype;
+- position, relevant DOM hierarchy, stable class names, and component classes such as `div.cmp-*`;
+- visual/layout signature, responsive behavior, and interaction/dependency evidence;
+- proposed authoring fields, constraints, and meaningful variants.
 
-For each visually or functionally distinct section, capture:
-- observed label/name and page URL;
-- position/order on page;
-- concise purpose and content model;
-- DOM signature: relevant tag hierarchy, stable class names, data attributes, and child patterns;
-- visual signature: layout, columns, media placement, background, spacing, typography, and
-  responsive behavior;
-- interaction signature and dependencies;
-- authoring fields and content constraints;
-- evidence reference (URL, screenshot, selector, or observation note).
+Do not treat every wrapper, `<section>`, row, heading, paragraph, simple list, or page template as a
+block. Record candidates and their page mapping in the working evidence file. Cite accessible source
+page URLs (and selectors or screenshots where useful); do not cite internal AEM repository paths as
+evidence of a source-site component.
 
-Do not equate every `<section>`, row, or wrapper with a block. A block is a reusable authorable
-content/behavior unit. Page layout wrappers, headings, paragraphs, links, and simple lists may be
-default document content or sections rather than custom blocks.
-
-### 4. Consolidate candidates into reusable blocks
+### 4. Consolidate candidates
 
 Compare candidates using all of the following:
 1. Same purpose and authoring intent.
 2. Same underlying content model and field relationships.
-3. Same structural/layout behavior.
+3. Same structure and layout behavior.
 4. Same interaction contract.
-5. Variations can be expressed safely through block options, classes, or authored content without
-   creating a confusing authoring experience.
+5. Differences can be expressed safely through authored content or controlled options.
 
-Merge candidates when the structure and behavior are materially the same and differences are
-content or controlled presentation variants.
+Merge when structure and behavior are materially the same; split when content models, interaction
+or state, accessibility, responsive behavior, data sources, or authoring workflows materially
+differ. Do not merge solely for visual similarity or split solely for changes in copy, color, image,
+alignment, or spacing. Record merge/split rationale and confidence.
 
-Split candidates when they have materially different content models, interaction/state behavior,
-accessibility requirements, responsive behavior, data sources, or authoring workflows.
+Treat a multi-step flow as one workflow/block candidate, not one block occurrence per step URL.
+Consolidate similarly structured checklist flows unless their purpose, content model, or interaction
+contract requires separate authoring.
 
-Do not merge solely because two sections look similar. Do not split solely because colors, images,
-copy, alignment, or spacing differ.
+### 5. Check Adobe and project capabilities before counting custom work
 
-For every merge/split decision, record a short rationale and confidence (high/medium/low). Flag
-uncertain pairs for human review rather than forcing a decision.
+1. If available, use Adobe's `block-collection-and-party` skill to check candidate coverage.
+   Otherwise, check the current Adobe Block Collection catalog and cite the source and date checked.
+2. Compare candidates with Adobe-provided blocks and patterns (for example hero, cards, columns,
+   accordion, tabs, and carousel); do not count a candidate as custom merely because the project
+   repository was not supplied.
+3. If an EDS project repository or library is available, inspect its `blocks/`, `scripts/`,
+   `styles/`, `models/`, and conventions. Mark satisfied candidates as project reuse and identify
+   extensions separately from new blocks.
+4. Use these `implementation_status` values consistently: `custom`, `adobe-reuse`, `project-reuse`,
+   `standard-structure`, `global-structure`, and `unresolved`. If a capability cannot be verified,
+   label it unresolved rather than assuming it is absent.
 
-### 5. Check existing EDS capabilities and project blocks
+### 6. Count and classify
 
-If an EDS repository is available:
-- inspect existing `blocks/`, `scripts/`, `styles/`, `models/`, `filters/`, and project
-  conventions;
-- identify blocks that already satisfy a candidate, blocks that need extension, and genuinely
-  new blocks;
-- avoid recommending a duplicate of an existing block;
-- distinguish project-specific blocks from standard document structures and reusable shared
-  utilities.
+Report these independently:
+- **Unique custom blocks**: distinct implementations that need to be created.
+- **Block occurrences**: observed placements or estimated page appearances, without adding them to
+  the custom-block count.
+- **Block variations**: supported styles/options within a block, counted separately.
+- **Adobe blocks reused**, **project blocks reused**, **global structures**, and **standard EDS
+  structures**.
 
-If no repository or block library is supplied, label the result as a **greenfield estimate**. Do
-not claim that a candidate is already available in the project.
+Use the candidate category `global`, `content`, `interactive`, `media`, `forms`, `specialized`,
+`standard`, or `unresolved`.
 
-### 6. Classify the final inventory
+For each inventory row, use an integer `occurrence_count` only when there is a defensible number;
+leave it empty when unknown and set `occurrence_method` to `unverified`. Otherwise set the method
+to `verified placements` or `estimated page appearances`. Never put words such as `unverified` in
+the numeric count. State how estimates were derived and their sample coverage. Count a cross-page
+workflow once, not once for every step page. Do not count page templates as blocks.
 
-Use these categories:
-- Global: header, navigation, footer, breadcrumb, announcement.
-- Content: hero, image/text, cards, teaser, quote, stats, content list.
-- Interactive: tabs, accordion, carousel, filter, search, modal.
-- Media: video, gallery, media viewer, dynamic media integration.
-- Forms: contact, lead, application, embedded form.
-- Specialized/integration: map, calculator, API-driven widget, third-party embed.
-- Standard document structure: headings, paragraphs, lists, tables, links, and simple
-  layout/content patterns that do not require a custom block.
-
-A header/footer may be implemented as site-level EDS structure rather than an ordinary content
-block. Report them separately and state the implementation assumption.
-
-### 7. Estimate effort
-
-Estimate implementation effort in **developer-days**, not elapsed calendar days. Use the following
-starting ranges and adjust with evidence:
-- Low: 0.5–1.5 days.
-- Medium: 2–4 days.
-- High: 5–10 days.
-- Very high: 10+ days; break into independently estimable work items.
-
-Include in each estimate the block's authoring model, HTML decoration, CSS/responsive work,
-JavaScript/accessibility, unit or browser tests, and integration work as applicable. State what is
-excluded (content migration, DAM asset cleanup, author training, QA/UAT, deployment, analytics,
-translations, etc.).
-
-Do not multiply the effort for one block by its occurrence count. Reuse count informs testing and
-authoring validation, not the number of implementations. Add separate effort for distinct
-variants only when they materially add implementation complexity.
-
-Provide low/likely/high totals and assumptions. Avoid false precision; ranges are preferred.
-
-### 8. Validate coverage
+### 7. Validate coverage and evidence
 
 Before finalizing:
-- ensure every discovered in-scope page is mapped to an archetype;
-- ensure every observed section is mapped to a block, standard structure, global structure,
-  out-of-scope item, or unresolved candidate;
-- verify repeated candidates were checked for consolidation;
-- verify unique blocks are not confused with block occurrences or variations;
-- list inaccessible, uninspected, and dynamically hidden content;
-- clearly separate observed facts, inferred recommendations, and open questions.
+- ensure discovered pages are assigned to an archetype or explicitly excluded/unresolved;
+- map each observed section to a candidate, an existing Adobe/project capability, standard
+  structure, global structure, or unresolved item;
+- verify candidate consolidations and status against the evidence map;
+- reconcile unique custom block, occurrence, and variation totals independently;
+- ensure report coverage, sample counts, and CSV evidence-page counts agree;
+- list inaccessible, uninspected, dynamic, and unsampled content, with confidence and open questions.
 
-## Required deliverables
+### 8. Write the deliverables
 
-Create only these two files:
+Save client material outside the skill and project repositories, in
+`<projects>/<client>/discovery/` (or the team's equivalent approved client-output folder).
 
-1. **Block discovery report** — executive summary, crawl/inspection coverage, unique custom block
-   count, global structures, standard EDS content, key consolidation decisions, effort range,
-   risks/open questions, and recommended implementation sequence. Summarize page coverage and
-   evidence; do not add separate page-inventory, sitemap-inventory, or page-to-block-matrix files.
-2. **Block inventory CSV** — one row per recommended block, including its purpose, authoring model,
-   variants, occurrence count, complexity, effort range, integrations, confidence, evidence pages,
-   and notes. Use `assets/block-inventory-template.csv` as the spreadsheet-ready template.
+Create only these two user-facing files:
 
-Use `references/report-schema.md` as the internal data shape for preparing these deliverables;
-do not emit a separate JSON report unless the user asks for one. Crawl data, page mappings, and
-sitemap entries are working evidence only and should not be retained as additional deliverables.
+1. **Block discovery report** — scope and authorization, sample/crawl coverage, unique custom block
+   count, occurrence and variation totals, Adobe/project reuse, global structures, standard EDS
+   content, consolidation decisions, evidence limitations, risks, and open questions.
+2. **Block inventory CSV** — one row per candidate, including implementation status, purpose,
+   authoring model, variations, numeric occurrence count and method, complexity, integrations,
+   confidence, evidence pages, and notes. Use `assets/block-inventory-template.csv`.
 
-## Counting rules
-
-Always report these as separate numbers:
-- **Unique custom blocks**: distinct reusable block implementations recommended.
-- **Block occurrences**: total placements across all pages.
-- **Block variations**: supported options/styles within a block.
-- **Global structures**: site-wide elements such as header/footer, reported separately unless the
-  project explicitly models them as blocks.
-- **Standard EDS structures**: content handled without custom block code.
-- **Existing blocks reused**: already present in the supplied project/repository.
-
-Never add occurrences or variations to the unique block count.
-
-Every block-inventory row must populate `occurrence_count`; never leave it blank or use zero to
-mean unknown. Use an internal page-to-block evidence map while analyzing and deduplicate URL
-aliases by canonical page. Count verified placements when directly observed; otherwise use an
-estimated page-appearance count and label it as an estimate in `notes`, not as an exact placement
-count. Use `unverified` when no defensible count can be derived. Do not export the internal
-page-to-block map as a separate file.
+Keep the crawl JSON and page-to-block map as internal working evidence next to those files, not as
+additional reports and never in the repositories. Do not output developer-day, cost, or calendar
+duration estimates; those are not reliable block-discovery measures and belong in later project
+planning if requested.
 
 ## Output quality rules
 
 - Never invent pages, behavior, or component requirements.
-- Cite each block recommendation with at least one evidence page or mark it as inferred.
-- Use concise, consistent, kebab-case block names.
-- Include confidence and unresolved questions.
-- Do not call a crawl complete if coverage is partial.
-- Do not present effort ranges as commitments.
-- Prefer reuse, but do not create an unmaintainable mega-block with dozens of unrelated modes.
+- Cite each recommendation with at least one source page or mark it inferred.
+- Use concise, consistent, kebab-case candidate names.
+- Keep unique blocks, occurrences, variations, and reuse statuses distinct.
+- Do not call a sample or capped crawl complete.
+- Prefer reuse without hiding materially different content models or interactions in a mega-block.

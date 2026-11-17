@@ -1,6 +1,6 @@
 {
   "name": "adobe-eds-skills",
-  "description": "Skills for migrating sites to AEM Edge Delivery Services with Document Authoring: block discovery and sizing, a kickoff that sets up the project, a work plan and progress tracker from the client's documents, page parity with the original site, guarded publishing, redirects to the legacy site, progress reports for the client's weekly call, and a client handover.",
+  "description": "Skills for migrating sites to AEM Edge Delivery Services with Document Authoring: block discovery, a kickoff that sets up the project, a work plan and progress tracker from the client's documents, page parity with the original site, guarded publishing, redirects to the legacy site, progress reports for the client's weekly call, and a client handover.",
   "author": {
     "name": "William Gajewski"
   },
