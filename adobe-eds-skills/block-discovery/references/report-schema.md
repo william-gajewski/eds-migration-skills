@@ -15,14 +15,32 @@ count is `null` with `occurrence_method` set to `unverified`; it is never zero t
     "scope": "Approved /section/ path",
     "authorization": "Approved by site owner on YYYY-MM-DD",
     "generated_at": "YYYY-MM-DD",
+    "crawl_complete": false,
+    "limit_reached": false,
     "pages_discovered": 0,
     "pages_sampled": 0,
+    "documents_discovered": 0,
     "coverage_percent": 0,
     "sampling_method": "Sitemap counts, grouped by template; two representative pages per group",
+    "request_settings": {
+      "authorized_by": "Site owner, YYYY-MM-DD",
+      "contact": "crawler@example.com",
+      "user_agent": "eds-migration-skills-block-discovery/1.0",
+      "delay_seconds": 1,
+      "effective_delay_seconds": 1,
+      "workers": 4
+    },
+    "exclusions": [],
+    "failures": [],
     "notes": []
   },
   "summary": {
     "unique_custom_blocks": 0,
+    "unique_custom_blocks_range": {
+      "minimum": 0,
+      "maximum": 0,
+      "assumptions": []
+    },
     "occurrences": {
       "verified_placements": 0,
       "estimated_page_appearances": 0,
@@ -56,6 +74,7 @@ count is `null` with `occurrence_method` set to `unverified`; it is never zero t
   "page_to_block_evidence": [
     {
       "canonical_page": "https://www.example.com/",
+      "served_page": "https://www.example.com/",
       "archetype": "home",
       "inspected": true,
       "block_ids": ["hero"],
@@ -76,3 +95,6 @@ count is `null` with `occurrence_method` set to `unverified`; it is never zero t
 
 For partial audits, report the sample and exclusions, and keep coverage below 100%. Cite source
 page URLs rather than internal repository paths. Do not invent counts, evidence, or capabilities.
+Use final served URLs for citations. Record an exact custom-block total only when all relevant
+candidates are resolved; otherwise provide a minimum/maximum range with explicit assumptions.
+Count cross-page workflows once, independent of how many step pages appear in the evidence map.

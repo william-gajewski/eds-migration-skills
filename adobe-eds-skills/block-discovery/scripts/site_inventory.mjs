@@ -9,9 +9,50 @@ import { gunzipSync } from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 
 const USER_AGENT_TOKEN = 'eds-migration-skills-block-discovery';
-const USER_AGENT = `${USER_AGENT_TOKEN}/1.0 (+https://github.com/william-gajewski)`;
+const USER_AGENT = `${USER_AGENT_TOKEN}/1.0`;
 const MAX_BYTES = 5_000_000;
 const QUERY_CONTENT_KEYS = new Set(['id', 'lang', 'locale', 'page', 'q', 'category', 'plan']);
+const DOCUMENT_EXTENSIONS = new Set([
+  '.pdf', '.doc', '.docx', '.docm', '.odt', '.rtf', '.xls', '.xlsx', '.xlsm', '.ods',
+  '.ppt', '.pptx', '.pptm', '.odp', '.csv', '.tsv', '.epub', '.zip',
+]);
+const DOCUMENT_CONTENT_TYPES = [
+  /^application\/pdf$/,
+  /^application\/msword$/,
+  /^application\/vnd\.ms-(?:excel|powerpoint|word)$/,
+  /^application\/vnd\.openxmlformats-officedocument\.(?:wordprocessingml|spreadsheetml|presentationml)\./,
+  /^application\/vnd\.oasis\.opendocument\./,
+  /^application\/rtf$/,
+  /^text\/csv$/,
+];
+
+function requestHeaders(args = {}) {
+  const isContactUrl = args.contact && /^https?:\/\//i.test(args.contact);
+  const headers = {
+    'User-Agent': isContactUrl ? `${USER_AGENT} (+${args.contact})` : USER_AGENT,
+  };
+  if (args.contact && !isContactUrl) headers.From = args.contact;
+  return headers;
+}
+
+function normalizedHostname(value) {
+  const url = new URL(value);
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
+  return url.port ? `${hostname}:${url.port}` : hostname;
+}
+
+function isDocumentUrl(value) {
+  return DOCUMENT_EXTENSIONS.has(path.extname(new URL(value).pathname).toLowerCase());
+}
+
+function isDocumentContentType(value) {
+  return DOCUMENT_CONTENT_TYPES.some((pattern) => pattern.test(value));
+}
+
+function isExcludedUrl(value, exclusions) {
+  const pathname = new URL(value).pathname;
+  return exclusions.some((prefix) => pathname === prefix.slice(0, -1) || pathname.startsWith(prefix));
+}
 
 function normalizeUrl(value) {
   let url;
@@ -164,7 +205,7 @@ function inspectHtml(html) {
     const attrs = parseAttributes(token.slice(match[0].length));
     if (tag === 'head') inHead = true;
     if (tag === 'title') titleDepth += 1;
-    if (inHead && tag === 'link' && attrs.rel?.toLowerCase() === 'canonical') {
+    if (tag === 'link' && attrs.rel?.toLowerCase() === 'canonical') {
       canonical = attrs.href || null;
     }
     if (tag === 'a' && attrs.href) links.push(attrs.href);
@@ -258,6 +299,7 @@ async function fetchResource(url, timeout, {
   originHost = new URL(url).host,
   pathPrefix = null,
   bodyTypes = null,
+  headers = { 'User-Agent': USER_AGENT },
   maxRedirects = 10,
 } = {}) {
   let requestUrl = url;
@@ -270,7 +312,7 @@ async function fetchResource(url, timeout, {
     }
     if (limiter) await limiter.wait();
     const response = await fetch(requestUrl, {
-      headers: { 'User-Agent': USER_AGENT },
+      headers,
       redirect: 'manual',
       signal: AbortSignal.timeout(timeout * 1000),
     });
@@ -387,7 +429,7 @@ function parseRobots(text, status = 200) {
 
 function applicableRobotsGroup(robot) {
   const matching = robot.groups.filter((entry) => (
-    entry.agents.some((name) => name && name !== '*' && USER_AGENT_TOKEN.includes(name))
+    entry.agents.some((name) => name.toLowerCase() === USER_AGENT_TOKEN.toLowerCase())
   ));
   if (matching.length) {
     return {
@@ -402,15 +444,23 @@ function applicableRobotsGroup(robot) {
   };
 }
 
+function normalizeRobotsPath(value) {
+  const encoded = encodeURI(value).replace(/%25([0-9a-f]{2})/gi, '%$1');
+  return encoded.replace(/%([0-9a-f]{2})/gi, (match, hex) => {
+    const character = String.fromCharCode(Number.parseInt(hex, 16));
+    return /[A-Za-z0-9\-._~]/.test(character) ? character : `%${hex.toUpperCase()}`;
+  });
+}
+
 function robotsCanFetch(robot, value) {
   if (robot.disallowAll) return false;
   if (robot.allowAll) return true;
   const { rules } = applicableRobotsGroup(robot);
   const url = new URL(value);
-  const target = `${url.pathname}${url.search}`;
+  const target = normalizeRobotsPath(`${url.pathname}${url.search}`);
   const matching = [];
   for (const rule of rules) {
-    let pattern = rule.path;
+    let pattern = normalizeRobotsPath(rule.path);
     if (!pattern) continue;
     const anchored = pattern.endsWith('$');
     if (anchored) pattern = pattern.slice(0, -1);
@@ -427,13 +477,14 @@ function decodeHtml(body, charset) {
   return new TextDecoder(charset).decode(body);
 }
 
-async function inspectPage(url, timeout, limiter, robot, originHost, pathPrefix) {
+async function inspectPage(url, timeout, limiter, robot, originHost, pathPrefix, args) {
   const response = await fetchResource(url, timeout, {
     limiter,
     robot,
     originHost,
     pathPrefix,
     bodyTypes: new Set(['text/html', 'application/xhtml+xml']),
+    headers: requestHeaders(args),
   });
   const page = {
     url,
@@ -450,7 +501,14 @@ async function inspectPage(url, timeout, limiter, robot, originHost, pathPrefix)
   if (response.contentType === 'text/html' || response.contentType === 'application/xhtml+xml') {
     const parsed = inspectHtml(decodeHtml(response.body, response.charset));
     page.title = parsed.title;
-    if (parsed.canonical) page.canonical = normalizeUrl(new URL(parsed.canonical, response.finalUrl).href);
+    if (parsed.canonical) {
+      try {
+        const canonical = new URL(parsed.canonical, response.finalUrl).href;
+        page.canonical = normalizeUrl(canonical) || canonical;
+      } catch {
+        page.canonical = parsed.canonical;
+      }
+    }
     page.sections = parsed.sections;
     page.component_classes = parsed.component_classes;
     page.class_counts = parsed.class_counts;
@@ -466,6 +524,7 @@ async function inspectPage(url, timeout, limiter, robot, originHost, pathPrefix)
 }
 
 function retryableFailure(failure) {
+  if (typeof failure !== 'string' && failure.kind === 'urls') return false;
   const error = typeof failure === 'string' ? failure : failure.message || failure.error || '';
   if (error.includes('disallowed by robots.txt')
       || error.includes('outside crawl scope')
@@ -503,7 +562,7 @@ async function withRetries(operation, retries, priorAttempts = 0) {
 
 async function inspectPageWithRetries(url, args, limiter, robot, originHost, priorAttempts = 0) {
   return withRetries(
-    () => inspectPage(url, args.timeout, limiter, robot, originHost, args.pathPrefix),
+    () => inspectPage(url, args.timeout, limiter, robot, originHost, args.pathPrefix, args),
     args.retries,
     priorAttempts,
   );
@@ -527,7 +586,9 @@ async function sitemapLocations(value, {
   limiter,
   robot,
   originHost,
+  headers,
   failures,
+  exclusions,
   retries,
   seen = new Set(),
   depth = 0,
@@ -540,7 +601,7 @@ async function sitemapLocations(value, {
   seen.add(value);
   try {
     const response = await withRetries(
-      () => fetchResource(value, timeout, { limiter, robot, originHost }),
+      () => fetchResource(value, timeout, { limiter, robot, originHost, headers }),
       retries,
     );
     const text = decodeSitemapBody(response.body, value, response.contentType);
@@ -556,19 +617,25 @@ async function sitemapLocations(value, {
       const nested = [];
       for (const location of locations) {
         nested.push(...await sitemapLocations(location, {
-          timeout, limiter, robot, originHost, failures, retries, seen, depth: depth + 1,
+          timeout, limiter, robot, originHost, headers, failures, exclusions, retries, seen, depth: depth + 1,
         }));
       }
       return nested;
     }
     return locations.map(normalizeUrl).filter(Boolean);
   } catch (error) {
-    failures.push({
-      url: value,
-      error: error.message,
-      attempts: error.attempts || 1,
-      kind: 'sitemap',
-    });
+    if (error.message.includes('disallowed by robots.txt')) {
+      exclusions.push({ url: value, reason: 'sitemap disallowed by robots.txt' });
+    } else if (error.message.includes('outside crawl scope')) {
+      exclusions.push({ url: value, reason: 'sitemap is outside crawl scope' });
+    } else {
+      failures.push({
+        url: value,
+        error: error.message,
+        attempts: error.attempts || 1,
+        kind: 'sitemap',
+      });
+    }
     return [];
   }
 }
@@ -578,7 +645,12 @@ function usage() {
     'Usage: node site_inventory.mjs <url> [options]',
     '',
     'Options:',
-    '  --max-pages <n>       Maximum URLs to process (default: 500)',
+    '  --max-pages <n>       Maximum HTML pages to process (default: 500)',
+    '  --authorized-by <who, when>  Required for link-following crawls and caps over 500',
+    '  --contact <url-or-email>     Optional public crawl contact',
+    '  --urls <file>         Sample URLs, one per line; does not follow links',
+    '  --sitemap <url>       Use this sitemap instead of robots.txt references',
+    '  --exclude <path>      Exclude a path prefix (repeatable)',
     '  --delay <seconds>     Minimum seconds between request starts (default: 1)',
     '  --workers <n>         Maximum concurrent page requests (default: 4)',
     '  --path-prefix <path>  Restrict crawling to a URL path and its descendants',
@@ -600,6 +672,11 @@ function parseArgs(argv) {
     retries: 1,
     timeout: 15,
     pathPrefix: null,
+    urlsFile: null,
+    sitemaps: [],
+    exclusions: [],
+    authorizedBy: null,
+    contact: null,
     out: '-',
     resume: false,
   };
@@ -612,6 +689,11 @@ function parseArgs(argv) {
     ['--retries', 'retries'],
     ['--timeout', 'timeout'],
     ['--out', 'out'],
+    ['--authorized-by', 'authorizedBy'],
+    ['--contact', 'contact'],
+    ['--urls', 'urlsFile'],
+    ['--sitemap', 'sitemap'],
+    ['--exclude', 'exclude'],
   ]);
   const numeric = new Set(['maxPages', 'delay', 'workers', 'progressEvery', 'retries', 'timeout']);
   let startUrl = null;
@@ -632,7 +714,9 @@ function parseArgs(argv) {
     }
     const value = inlineValue ?? argv[++i];
     if (value === undefined || value.startsWith('--')) throw new Error(`${option} requires a value`);
-    args[name] = numeric.has(name) ? Number(value) : value;
+    if (name === 'sitemap') args.sitemaps.push(value);
+    else if (name === 'exclude') args.exclusions.push(value);
+    else args[name] = numeric.has(name) ? Number(value) : value;
   }
   if (!startUrl) throw new Error('a starting URL is required');
   args.start = normalizeUrl(startUrl);
@@ -641,6 +725,44 @@ function parseArgs(argv) {
   if (!isWithinPathPrefix(args.start, args.pathPrefix)) {
     throw new Error('The starting URL is outside --path-prefix');
   }
+  if (args.urlsFile && args.sitemaps.length) {
+    throw new Error('--urls sampling cannot be combined with --sitemap');
+  }
+  if (args.maxPages > 500 && !args.authorizedBy?.trim()) {
+    throw new Error('--authorized-by "<who, when>" is required when --max-pages exceeds 500');
+  }
+  if (!args.urlsFile && !args.authorizedBy?.trim()) {
+    throw new Error('--authorized-by "<who, when>" is required for sitemap or link-following crawls; use --urls for a sample');
+  }
+  if (args.authorizedBy && !args.authorizedBy.trim()) {
+    throw new Error('--authorized-by cannot be empty');
+  }
+  if (args.contact) {
+    if (/[\r\n]/.test(args.contact)) throw new Error('--contact cannot contain line breaks');
+    if (/^https?:\/\//i.test(args.contact)) {
+      const contact = new URL(args.contact);
+      if (contact.username || contact.password) throw new Error('--contact URL cannot contain credentials');
+      args.contact = contact.href;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(args.contact)) {
+      throw new Error('--contact must be an HTTP(S) URL or email address');
+    }
+  }
+  args.exclusions = args.exclusions.map((value) => {
+    if (value.startsWith('/')) return normalizePathPrefix(value);
+    const url = normalizeUrl(value);
+    if (!url || normalizedHostname(url) !== normalizedHostname(args.start)) {
+      throw new Error('--exclude must be a path prefix or URL on the starting host');
+    }
+    return normalizePathPrefix(new URL(url).pathname);
+  });
+  args.sitemaps = args.sitemaps.map((value) => {
+    const url = normalizeUrl(value);
+    if (!url) throw new Error('--sitemap must be an absolute HTTP(S) URL');
+    if (normalizedHostname(url) !== normalizedHostname(args.start)) {
+      throw new Error('--sitemap must be on the starting host');
+    }
+    return url;
+  });
   if (!Number.isInteger(args.maxPages) || !Number.isInteger(args.workers) || !Number.isInteger(args.progressEvery) || !Number.isInteger(args.retries)
       || args.maxPages < 1 || args.workers < 1 || args.progressEvery < 1 || args.delay < 0 || args.retries < 0 || args.timeout <= 0
       || !Number.isFinite(args.maxPages + args.workers + args.progressEvery + args.delay + args.retries + args.timeout)) {
@@ -650,23 +772,35 @@ function parseArgs(argv) {
   return args;
 }
 
-function buildResult(start, maxPages, robotsUrl, robotsError, sitemapUrls, pages, failures, queue, pending, visited, complete) {
+function buildResult(args, robotsUrl, robotsError, sitemapUrls, pages, failures, exclusions, documents, queue, pending, visited, complete, effectiveDelay) {
   const discoveredUrls = new Set([...visited, ...queue, ...pending.values()]);
   return {
-    start_url: start,
+    start_url: args.start,
     generated_at: new Date().toISOString(),
-    max_pages: maxPages,
+    max_pages: args.maxPages,
     pages_discovered: discoveredUrls.size,
     pages_crawled: pages.length,
+    documents_discovered: documents.length,
+    request_settings: {
+      authorized_by: args.authorizedBy,
+      contact: args.contact,
+      user_agent: requestHeaders(args)['User-Agent'],
+      from: args.contact && !/^https?:\/\//i.test(args.contact) ? args.contact : null,
+      delay_seconds: args.delay,
+      effective_delay_seconds: effectiveDelay,
+      workers: args.workers,
+    },
     robots_url: robotsUrl,
     robots_error: robotsError,
     sitemaps: sitemapUrls,
-    limit_reached: Boolean(queue.length && visited.size >= maxPages),
+    limit_reached: Boolean(queue.length && visited.size >= args.maxPages),
     complete,
     queued_urls: [...new Set([...queue, ...pending.values()])].sort(),
     visited_urls: [...visited].sort(),
     pages,
     failures,
+    exclusions,
+    documents,
   };
 }
 
@@ -681,7 +815,7 @@ function writeResult(result, outputPath) {
   fs.renameSync(temporaryPath, outputPath);
 }
 
-async function fetchRobots(url, timeout, originHost, limiter) {
+async function fetchRobots(url, timeout, originHost, limiter, headers) {
   let requestUrl = url;
   for (let redirects = 0; redirects <= 10; redirects += 1) {
     if (new URL(requestUrl).host.toLowerCase() !== originHost.toLowerCase()) {
@@ -689,7 +823,7 @@ async function fetchRobots(url, timeout, originHost, limiter) {
     }
     await limiter.wait();
     const response = await fetch(requestUrl, {
-      headers: { 'User-Agent': USER_AGENT },
+      headers,
       redirect: 'manual',
       signal: AbortSignal.timeout(timeout * 1000),
     });
@@ -723,11 +857,12 @@ async function crawl(args) {
   const origin = parts.origin;
   const robotsUrl = `${origin}/robots.txt`;
   const limiter = new RateLimiter(args.delay);
+  const headers = requestHeaders(args);
   let robot;
   let robotsError = null;
   try {
     robot = await withRetries(
-      () => fetchRobots(robotsUrl, args.timeout, parts.host, limiter),
+      () => fetchRobots(robotsUrl, args.timeout, parts.host, limiter, headers),
       args.retries,
     );
   } catch (error) {
@@ -736,7 +871,25 @@ async function crawl(args) {
       start_url: start,
       generated_at: new Date().toISOString(),
       max_pages: args.maxPages,
+      pages_discovered: 0,
+      pages_crawled: 0,
+      documents_discovered: 0,
+      request_settings: {
+        authorized_by: args.authorizedBy,
+        contact: args.contact,
+        user_agent: headers['User-Agent'],
+        from: headers.From || null,
+        delay_seconds: args.delay,
+        effective_delay_seconds: args.delay,
+        workers: args.workers,
+      },
       pages: [],
+      documents: [],
+      exclusions: [],
+      robots_url: robotsUrl,
+      robots_error: robotsError,
+      sitemaps: [],
+      limit_reached: false,
       failures: [{ url: robotsUrl, error: robotsError, attempts: error.attempts || 1 }],
       complete: false,
     }, args.out);
@@ -745,29 +898,85 @@ async function crawl(args) {
 
   const robotsGroup = applicableRobotsGroup(robot);
   const crawlDelay = robotsGroup.crawlDelays.length ? Math.max(...robotsGroup.crawlDelays) : 0;
-  limiter.setInterval(Math.max(args.delay, crawlDelay));
-  const sitemapUrls = robot.sitemaps.length ? robot.sitemaps : [`${origin}/sitemap.xml`];
+  const effectiveDelay = Math.max(args.delay, crawlDelay);
+  limiter.setInterval(effectiveDelay);
+  const sitemapUrls = args.urlsFile
+    ? []
+    : args.sitemaps.length ? args.sitemaps : robot.sitemaps.length ? robot.sitemaps : [`${origin}/sitemap.xml`];
   const sitemapFailures = [];
+  const sitemapExclusions = [];
   const sitemapSeeds = [];
-  for (const url of sitemapUrls) {
-    sitemapSeeds.push(...await sitemapLocations(url, {
-      timeout: args.timeout,
-      limiter,
-      robot,
-      originHost: parts.host,
-      failures: sitemapFailures,
-      retries: args.retries,
-    }));
+  if (!args.urlsFile) {
+    for (const url of sitemapUrls) {
+      sitemapSeeds.push(...await sitemapLocations(url, {
+        timeout: args.timeout,
+        limiter,
+        robot,
+        originHost: parts.host,
+        headers,
+        failures: sitemapFailures,
+        exclusions: sitemapExclusions,
+        retries: args.retries,
+      }));
+    }
   }
-  const seeds = sitemapSeeds
-    .filter((url) => {
-      const candidate = new URL(url);
-      return candidate.host.toLowerCase() === parts.host.toLowerCase()
-        && isWithinPathPrefix(url, args.pathPrefix);
-    });
-  const queueSet = new Set([start, ...seeds]);
-  const pages = [];
   let failures = [...sitemapFailures];
+  const exclusions = [];
+  const exclusionKeys = new Set();
+  const recordExclusion = (url, reason) => {
+    const key = `${url}\n${reason}`;
+    if (exclusionKeys.has(key)) return;
+    exclusionKeys.add(key);
+    exclusions.push({ url, reason });
+  };
+  for (const exclusion of sitemapExclusions) recordExclusion(exclusion.url, exclusion.reason);
+
+  const documentSources = new Map();
+  const recordDocument = (url, source) => {
+    if (!documentSources.has(url)) documentSources.set(url, new Set());
+    if (source) documentSources.get(url).add(source);
+  };
+  const listedUrls = args.urlsFile
+    ? fs.readFileSync(args.urlsFile, 'utf8').split(/\r?\n/).flatMap((raw, index) => {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) return [];
+      try {
+        const normalized = normalizeUrl(new URL(line, start).href);
+        if (!normalized) throw new Error('URL must use HTTP or HTTPS');
+        return [normalized];
+      } catch (error) {
+        failures.push({
+          url: `${args.urlsFile}:${index + 1}`,
+          error: `invalid URL list entry: ${error.message}`,
+          kind: 'urls',
+        });
+        return [];
+      }
+    })
+    : [start, ...sitemapSeeds];
+  const seeds = [];
+  for (const url of listedUrls) {
+    const candidate = new URL(url);
+    if (candidate.host.toLowerCase() !== parts.host.toLowerCase()) {
+      recordExclusion(url, 'outside starting host');
+      continue;
+    }
+    if (!isWithinPathPrefix(url, args.pathPrefix)) {
+      recordExclusion(url, 'outside --path-prefix');
+      continue;
+    }
+    if (isDocumentUrl(url)) {
+      recordDocument(url, args.urlsFile ? 'URL list' : 'sitemap');
+      continue;
+    }
+    if (isExcludedUrl(url, args.exclusions)) {
+      recordExclusion(url, 'excluded by --exclude');
+      continue;
+    }
+    seeds.push(url);
+  }
+  const queueSet = new Set(seeds);
+  const pages = [];
   const visited = new Set();
   const attempts = new Map();
   let queue = [...queueSet];
@@ -782,10 +991,19 @@ async function crawl(args) {
     if (previous.start_url !== start) throw new Error('The resume file belongs to a different start URL');
     pages.push(...(previous.pages || []));
     failures = [...sitemapFailures, ...(previous.failures || []).filter((failure) => failure.kind !== 'sitemap')];
+    for (const exclusion of previous.exclusions || []) {
+      recordExclusion(exclusion.url, exclusion.reason);
+    }
+    for (const document of previous.documents || []) {
+      for (const source of document.discovered_on || []) recordDocument(document.url, source);
+      recordDocument(document.url, null);
+    }
     for (const url of previous.visited_urls || []) visited.add(url);
     for (const failure of failures) attempts.set(failure.url, failure.attempts || 1);
 
-    const resumeUrls = new Set((previous.queued_urls || []).filter((url) => isWithinPathPrefix(url, args.pathPrefix)));
+    const resumeUrls = new Set((previous.queued_urls || []).filter((url) => (
+      isWithinPathPrefix(url, args.pathPrefix) && !isExcludedUrl(url, args.exclusions)
+    )));
     const recorded = new Set([
       ...pages.map((page) => page.url),
       ...failures.map((failure) => failure.url),
@@ -819,12 +1037,20 @@ async function crawl(args) {
       }
       if (candidate.host.toLowerCase() !== parts.host.toLowerCase()) continue;
       if (!isWithinPathPrefix(url, args.pathPrefix)) continue;
-      visited.add(url);
+      if (isDocumentUrl(url)) {
+        recordDocument(url, 'linked or listed');
+        continue;
+      }
+      if (isExcludedUrl(url, args.exclusions)) {
+        recordExclusion(url, 'excluded by --exclude');
+        continue;
+      }
       if (!robotsCanFetch(robot, url)) {
-        failures.push({ url, error: 'disallowed by robots.txt' });
+        recordExclusion(url, 'disallowed by robots.txt');
         outcomesSinceCheckpoint += 1;
         continue;
       }
+      visited.add(url);
       const task = inspectPageWithRetries(
         url, args, limiter, robot, parts.host, attempts.get(url) || 0,
       );
@@ -839,16 +1065,24 @@ async function crawl(args) {
     const url = pending.get(completed.task);
     pending.delete(completed.task);
     if (completed.error) {
-      const attemptsForUrl = (attempts.get(url) || 0) + 1;
-      attempts.set(url, completed.error.attempts || attemptsForUrl);
-      failures = failures.filter((failure) => failure.url !== url);
-      failures.push({
-        url,
-        error: completed.error.message,
-        attempts: completed.error.attempts || attemptsForUrl,
-      });
+      if (completed.error.message.includes('outside crawl scope')) {
+        recordExclusion(url, 'redirect or resource outside crawl scope');
+      } else {
+        const attemptsForUrl = (attempts.get(url) || 0) + 1;
+        attempts.set(url, completed.error.attempts || attemptsForUrl);
+        failures = failures.filter((failure) => failure.url !== url);
+        failures.push({
+          url,
+          error: completed.error.message,
+          attempts: completed.error.attempts || attemptsForUrl,
+        });
+      }
     } else {
-      pages.push(completed.value.page);
+      if (isDocumentContentType(completed.value.page.content_type)) {
+        recordDocument(completed.value.page.final_url, 'response content type');
+      } else {
+        pages.push(completed.value.page);
+      }
       failures = failures.filter((failure) => failure.url !== url);
       for (const href of completed.value.links) {
         let candidate;
@@ -857,10 +1091,17 @@ async function crawl(args) {
         } catch {
           candidate = null;
         }
-        if (candidate
-            && new URL(candidate).host.toLowerCase() === parts.host.toLowerCase()
-            && isWithinPathPrefix(candidate, args.pathPrefix)
-            && !queueSet.has(candidate)) {
+        if (!candidate || new URL(candidate).host.toLowerCase() !== parts.host.toLowerCase()) continue;
+        if (!isWithinPathPrefix(candidate, args.pathPrefix)) continue;
+        if (isDocumentUrl(candidate)) {
+          recordDocument(candidate, completed.value.page.final_url);
+          continue;
+        }
+        if (isExcludedUrl(candidate, args.exclusions)) {
+          recordExclusion(candidate, 'excluded by --exclude');
+          continue;
+        }
+        if (!args.urlsFile && !queueSet.has(candidate)) {
           queueSet.add(candidate);
           queue.push(candidate);
         }
@@ -869,11 +1110,13 @@ async function crawl(args) {
     outcomesSinceCheckpoint += 1;
 
     if (outcomesSinceCheckpoint >= args.progressEvery) {
-      console.error(`Crawled ${pages.length} pages; ${failures.length} failures/disallowed; ${queue.length + pending.size} queued.`);
+      console.error(`Crawled ${pages.length} pages; ${failures.length} failures; ${exclusions.length} exclusions; ${queue.length + pending.size} queued.`);
       if (args.out !== '-') {
         writeResult(buildResult(
-          start, args.maxPages, robotsUrl, robotsError, sitemapUrls,
-          pages, failures, queue, pending, visited, false,
+          args, robotsUrl, robotsError, sitemapUrls,
+          pages, failures, exclusions,
+          [...documentSources].map(([url, sources]) => ({ url, discovered_on: [...sources].sort() })),
+          queue, pending, visited, false, effectiveDelay,
         ), args.out);
       }
       outcomesSinceCheckpoint = 0;
@@ -881,9 +1124,12 @@ async function crawl(args) {
   }
 
   const result = buildResult(
-    start, args.maxPages, robotsUrl, robotsError, sitemapUrls,
-    pages, failures, queue, pending, visited,
-    !queue.length && !pending.size && visited.size < args.maxPages && !failures.length,
+    args, robotsUrl, robotsError, sitemapUrls,
+    pages, failures, exclusions,
+    [...documentSources].map(([url, sources]) => ({ url, discovered_on: [...sources].sort() })),
+    queue, pending, visited,
+    !queue.length && !pending.size,
+    effectiveDelay,
   );
   writeResult(result, args.out);
   return 0;
@@ -915,7 +1161,9 @@ export {
   fetchResource,
   inspectHtml,
   inspectPageWithRetries,
+  isDocumentContentType,
   normalizeUrl,
+  parseArgs,
   parseRobots,
   robotsCanFetch,
 };

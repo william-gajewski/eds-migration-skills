@@ -49,9 +49,27 @@ For an approved crawl, use `scripts/site_inventory.mjs` as a first-pass inventor
 
 ```bash
 node <skill>/scripts/site_inventory.mjs https://www.example.com \
+  --authorized-by "Site owner, YYYY-MM-DD" --contact crawler@example.com \
   --max-pages 500 --workers 4 --delay 1 --path-prefix /section/ \
   --out <projects>/<client>/discovery/site-inventory.json
 ```
+
+For an explicitly scoped sample, provide a URL-list file instead of crawling a sitemap or
+following page links:
+
+```bash
+node <skill>/scripts/site_inventory.mjs https://www.example.com \
+  --urls <projects>/<client>/discovery/sample-urls.txt \
+  --exclude /account/ --contact crawler@example.com \
+  --out <projects>/<client>/discovery/site-inventory.json
+```
+
+The URL list contains one absolute URL per line. This mode does not follow links and can be used
+without an authorization record for a sample. Sitemap or link-following crawls require
+`--authorized-by`; caps over 500 also require it. Supply a public contact URL or email with
+`--contact` when available. The saved crawl records authorization, User-Agent, requested and
+effective delay, worker limit, exclusions, failures, and discovered documents separately from HTML
+pages. Document URLs are counted, not downloaded as page evidence.
 
 The crawler stays on the starting host, checks robots rules on requests and redirects, honors the
 longer of `--delay` and robots `Crawl-delay`, and defaults to at most one request start per second.
@@ -62,6 +80,20 @@ compressed. The helper does not execute JavaScript or establish complete coverag
 Its page evidence includes class-token element counts from the fetched HTML. Use these as markup
 signals for occurrence analysis only after validating the class-to-block mapping on representative
 rendered pages; do not treat arbitrary CSS classes or repeated card items as block placements.
+
+Group the saved crawl before using it as page evidence:
+
+```bash
+node <skill>/scripts/analyze_inventory.mjs \
+  <projects>/<client>/discovery/site-inventory.json \
+  --out <projects>/<client>/discovery/grouped-inventory.json
+```
+
+The grouping helper trusts a canonical only when its authority matches the crawl host (case
+insensitive, with a trailing hostname dot ignored). Otherwise it groups on the final served URL
+and records the canonical as a risk. It normalizes trailing slashes, `.html`, and AEM
+`/content/<site>/<locale>/.../home` aliases. Use final served URLs for citations; review redirect,
+canonical, exclusion, and failure risks before sampling.
 
 Keep the crawl JSON and the page-to-block evidence map as working evidence next to the deliverables,
 outside the repository. Do not delete them after analysis: they support verification of the counts.
@@ -114,13 +146,16 @@ contract requires separate authoring.
 
 1. If available, use Adobe's `block-collection-and-party` skill to check candidate coverage.
    Otherwise, check the current Adobe Block Collection catalog and cite the source and date checked.
-2. Compare candidates with Adobe-provided blocks and patterns (for example hero, cards, columns,
-   accordion, tabs, and carousel); do not count a candidate as custom merely because the project
-   repository was not supplied.
-3. If an EDS project repository or library is available, inspect its `blocks/`, `scripts/`,
+2. Compare candidates against the full Block Collection set: accordion, breadcrumbs, cards,
+   carousel, columns, embed, footer, form, fragment, header, hero, modal, quote, search, table,
+   tabs, and video. Treat breadcrumbs as a header/navigation add-on when applicable. Form is
+   deprecated and Modal is an autoblock; note those statuses rather than presenting them as
+   ordinary recommended custom blocks.
+3. Do not count a candidate as custom merely because the project repository was not supplied.
+4. If an EDS project repository or library is available, inspect its `blocks/`, `scripts/`,
    `styles/`, `models/`, and conventions. Mark satisfied candidates as project reuse and identify
    extensions separately from new blocks.
-4. Use these `implementation_status` values consistently: `custom`, `adobe-reuse`, `project-reuse`,
+5. Use these `implementation_status` values consistently: `custom`, `adobe-reuse`, `project-reuse`,
    `standard-structure`, `global-structure`, and `unresolved`. If a capability cannot be verified,
    label it unresolved rather than assuming it is absent.
 
@@ -128,6 +163,10 @@ contract requires separate authoring.
 
 Report these independently:
 - **Unique custom blocks**: distinct implementations that need to be created.
+- **Custom-block range**: when unresolved reuse or consolidation decisions prevent an exact total,
+  report a confirmed minimum and a defensible maximum. Count only confirmed custom rows in the
+  minimum; add only unresolved candidates that could plausibly require a new custom block to the
+  maximum, and state the assumptions. Do not label the maximum as the confirmed count.
 - **Block occurrences**: observed placements or estimated page appearances, without adding them to
   the custom-block count.
 - **Block variations**: supported styles/options within a block, counted separately.
@@ -136,6 +175,11 @@ Report these independently:
 
 Use the candidate category `global`, `content`, `interactive`, `media`, `forms`, `specialized`,
 `standard`, or `unresolved`.
+
+Use `unresolved` when evidence does not establish a block boundary, behavior, authoring model, or
+reuse status. Do not silently classify an unresolved candidate as custom or omit it from the
+uncertainty range. Count variations only when they are meaningful supported authoring options; do
+not count copy, image, color, alignment, or spacing changes as variations by themselves.
 
 For each inventory row, use an integer `occurrence_count` only when there is a defensible number;
 leave it empty when unknown and set `occurrence_method` to `unverified`. Otherwise set the method

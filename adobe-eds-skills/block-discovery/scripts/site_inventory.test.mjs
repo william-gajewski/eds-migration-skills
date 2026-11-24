@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,6 +12,7 @@ import {
   inspectPageWithRetries,
   main,
   normalizeUrl,
+  parseArgs,
   parseRobots,
   robotsCanFetch,
 } from './site_inventory.mjs';
@@ -50,15 +51,35 @@ test('robots patterns match query strings without percent-encoding separators', 
   assert.equal(robotsCanFetch(robot, 'https://example.com/search?category=dental'), false);
 });
 
-test('a different product token does not match inside the full user-agent string', () => {
+test('robots patterns normalize percent-encoded unreserved path characters', () => {
+  const robot = parseRobots('User-agent: *\nDisallow: /members/%7Eguest');
+
+  assert.equal(robotsCanFetch(robot, 'https://example.com/members/~guest'), false);
+  assert.equal(robotsCanFetch(robot, 'https://example.com/members/%7Eguest'), false);
+});
+
+test('a similarly named product token does not match inside the full user-agent string', () => {
   const robot = parseRobots([
-    'User-agent: aem',
+    'User-agent: xeds-migration-skills-block-discovery',
     'Disallow: /',
     'User-agent: *',
     'Allow: /',
   ].join('\n'));
 
   assert.equal(robotsCanFetch(robot, 'https://example.com/'), true);
+});
+
+test('robots product-token matching is case-insensitive and exact', () => {
+  const robot = parseRobots('User-agent: EDS-MIGRATION-SKILLS-BLOCK-DISCOVERY\nDisallow: /private');
+
+  assert.equal(robotsCanFetch(robot, 'https://example.com/private/page'), false);
+});
+
+test('canonical links are retained even when the document omits a head element', () => {
+  assert.equal(
+    inspectHtml('<link rel="canonical" href="/preferred"><main>Content</main>').canonical,
+    '/preferred',
+  );
 });
 
 test('HTML inspection retains nested sections and div cmp classes without SVG titles', () => {
@@ -169,6 +190,7 @@ test('a failed robots.txt fetch is recorded and exits unsuccessfully', async () 
     const exitCode = await main([
       `${fixture.origin}/`,
       '--delay', '0',
+      '--authorized-by', 'site owner, 2026-11-23',
       '--out', outputPath,
     ]);
     const result = JSON.parse(await readFile(outputPath, 'utf8'));
@@ -221,6 +243,7 @@ test('a gzip sitemap is crawled into HTML-only page inventory', async () => {
       '--delay', '0',
       '--workers', '2',
       '--max-pages', '5',
+      '--authorized-by', 'site owner, 2026-11-23',
       '--out', outputPath,
     ]);
     const result = JSON.parse(await readFile(outputPath, 'utf8'));
@@ -229,8 +252,151 @@ test('a gzip sitemap is crawled into HTML-only page inventory', async () => {
     assert.equal(result.complete, true);
     assert.equal(sitemapRequests, 2);
     assert.deepEqual(result.pages[0].component_classes, ['cmp-hero']);
+    assert.deepEqual(result.documents, []);
   } finally {
     await fixture.close();
     await rm(outputDir, { recursive: true, force: true });
   }
+});
+
+test('URL-list sampling skips links and documents while recording request settings', async () => {
+  const requested = [];
+  const fixture = await startServer((request, response) => {
+    requested.push(request.url);
+    if (request.url === '/robots.txt') {
+      response.writeHead(200, { 'Content-Type': 'text/plain' });
+      response.end('User-agent: *\nAllow: /');
+      return;
+    }
+    if (request.url.endsWith('.pdf') || request.url === '/download') {
+      response.writeHead(200, { 'Content-Type': 'application/pdf' });
+      response.end('PDF');
+      return;
+    }
+    response.writeHead(200, { 'Content-Type': 'text/html' });
+    response.end('<a href="/linked">linked</a><a href="/blocked">blocked</a><a href="/report.pdf">report</a>');
+  });
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), 'block-discovery-'));
+  const urlsPath = path.join(outputDir, 'urls.txt');
+  const outputPath = path.join(outputDir, 'inventory.json');
+  await writeFile(
+    urlsPath,
+    `${fixture.origin}/sample\n${fixture.origin}/report.pdf\n${fixture.origin}/download\nhttps://outside.invalid/page\n`,
+  );
+
+  try {
+    const exitCode = await main([
+      `${fixture.origin}/`,
+      '--urls', urlsPath,
+      '--exclude', '/blocked',
+      '--contact', 'crawler@example.com',
+      '--delay', '0',
+      '--out', outputPath,
+    ]);
+    const result = JSON.parse(await readFile(outputPath, 'utf8'));
+    assert.equal(exitCode, 0);
+    assert.deepEqual(requested.sort(), ['/download', '/robots.txt', '/sample']);
+    assert.equal(result.pages_crawled, 1);
+    assert.equal(result.documents_discovered, 2);
+    assert.deepEqual(
+      result.documents.map((document) => document.url).sort(),
+      [`${fixture.origin}/download`, `${fixture.origin}/report.pdf`],
+    );
+    assert.equal(result.request_settings.from, 'crawler@example.com');
+    assert.equal(result.request_settings.contact, 'crawler@example.com');
+    assert.match(result.request_settings.user_agent, /^eds-migration-skills-block-discovery\/1\.0$/);
+    assert.deepEqual(
+      result.exclusions.map((exclusion) => exclusion.reason).sort(),
+      ['excluded by --exclude', 'outside starting host'],
+    );
+    assert.equal(result.complete, true);
+  } finally {
+    await fixture.close();
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('a drained crawl can be complete even when a page fetch failed', async () => {
+  const fixture = await startServer((request, response) => {
+    if (request.url === '/robots.txt') {
+      response.writeHead(200, { 'Content-Type': 'text/plain' });
+      response.end('User-agent: *\nAllow: /');
+      return;
+    }
+    if (request.url === '/sitemap.xml') {
+      response.writeHead(200, { 'Content-Type': 'application/xml' });
+      response.end('<urlset></urlset>');
+      return;
+    }
+    response.writeHead(404, { 'Content-Type': 'text/plain' });
+    response.end('Not found');
+  });
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), 'block-discovery-'));
+  const outputPath = path.join(outputDir, 'inventory.json');
+
+  try {
+    const exitCode = await main([
+      `${fixture.origin}/missing`,
+      '--authorized-by', 'site owner, 2026-11-23',
+      '--delay', '0',
+      '--out', outputPath,
+    ]);
+    const result = JSON.parse(await readFile(outputPath, 'utf8'));
+    assert.equal(exitCode, 0);
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.complete, true);
+    assert.equal(result.limit_reached, false);
+  } finally {
+    await fixture.close();
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('a page cap reports incomplete only when queued work remains', async () => {
+  const requested = [];
+  const fixture = await startServer((request, response) => {
+    requested.push(request.url);
+    if (request.url === '/robots.txt') {
+      response.writeHead(200, { 'Content-Type': 'text/plain' });
+      response.end('User-agent: *\nAllow: /');
+      return;
+    }
+    response.writeHead(200, { 'Content-Type': 'text/html' });
+    response.end('<html></html>');
+  });
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), 'block-discovery-'));
+  const urlsPath = path.join(outputDir, 'urls.txt');
+  const outputPath = path.join(outputDir, 'inventory.json');
+  await writeFile(urlsPath, `${fixture.origin}/one\n${fixture.origin}/two\n`);
+
+  try {
+    const exitCode = await main([
+      `${fixture.origin}/`,
+      '--urls', urlsPath,
+      '--max-pages', '1',
+      '--delay', '0',
+      '--out', outputPath,
+    ]);
+    const result = JSON.parse(await readFile(outputPath, 'utf8'));
+    assert.equal(exitCode, 0);
+    assert.equal(result.pages_crawled, 1);
+    assert.equal(result.complete, false);
+    assert.equal(result.limit_reached, true);
+    assert.deepEqual(result.queued_urls, [`${fixture.origin}/two`]);
+    assert.deepEqual(requested.sort(), ['/one', '/robots.txt']);
+  } finally {
+    await fixture.close();
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('link-following crawls require an authorization record', () => {
+  assert.throws(
+    () => parseArgs(['https://example.com/']),
+    /--authorized-by.*required/,
+  );
+  assert.equal(
+    parseArgs(['https://example.com/', '--urls', 'sample.txt']).urlsFile,
+    'sample.txt',
+  );
 });
