@@ -12,7 +12,7 @@ Claude Code plugins by the Adobe Drago Team, published as a plugin marketplace n
 |:--|:--|
 | `migration-kickoff` | start a project: check the machine, plan with `project-intake`, add the starter kit to the repository (a short AGENTS.md, a dated project log, LF line endings, smoke, accessibility and Lighthouse checks) and record the legacy site's breakpoints, screenshots and scores on day 1 |
 | `project-intake` | turn a client's documents and a quick survey of their site into a work plan the team can share (purpose, team, scope, gaps and questions, a plan against the usual four weeks, meeting cadence; Markdown and PDF), separate internal notes for the commercial context, and a progress tracker (`PROGRESS.md`) for the repository |
-| `team-availability` | after `project-intake`, check the plan's team against the roster and OOO dates: conflicts by project week, people proposed for open roles, meeting times outside working hours, in an internal note kept out of the repository |
+| `team-availability` | after `project-intake`, check the plan's team against the roster and OOO dates: conflicts by project week, people proposed for open roles, meeting times outside working hours, in a concise internal PDF report kept out of the repository |
 | `source-parity` | measure how closely a migrated page matches the original at each screen width, and find what to change |
 | `safe-publish` | preview, publish or restore after checking DA, preview and live, and who saved what, with a backup first |
 | `legacy-redirects` | build, check and upload the redirects sheet without hiding pages that have been migrated |
@@ -30,7 +30,7 @@ marketplace's copy in `~/.claude/plugins/marketplaces/wgajewski-skills/`. The sk
   needs 20.19. The boilerplate's CI runs Node 24.
 - `source-parity`: Playwright with Chromium (`npm i --no-save playwright`, then `npx playwright install chromium`).
 - `project-outtake`: Chrome, for local Lighthouse runs.
-- PDFs from `project-intake`, `project-outtake` and `progress-report`: pandoc, typst and the `aem-project-management` plugin, whose whitepaper template they use. Without them you get the Markdown only.
+- PDFs from `project-intake`, `project-outtake`, `progress-report` and `team-availability`: pandoc, typst and the `aem-project-management` plugin, whose whitepaper template they use. Without them you get the Markdown only.
 - `safe-publish`, `legacy-redirects`, `progress-report` and some `project-outtake` checks: a Document Authoring sign-in (`npx -y github:adobe-rnd/da-auth-helper token`). `progress-report` reads the site's audit log, which needs the site's `author` role or higher (`basic_author` can't read it).
 
 ## Install

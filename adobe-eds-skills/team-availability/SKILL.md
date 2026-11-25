@@ -1,6 +1,6 @@
 ---
 name: team-availability
-description: Check whether the team in a project-intake plan is actually available, using an approved roster and out-of-office (OOO) data, for an AEM Edge Delivery Services project. It maps absences to the plan's weeks, checks allocations and open roles, flags meeting times outside attendees' working hours, and writes an internal note kept outside the repository. Use it after project-intake whenever someone asks who is out during the project, whether a role is covered, whether a roster is current, or whether a meeting time works across time zones, even if they only say "is everyone around in January?". It doesn't write the plan; project-intake does.
+description: Check whether the team in a project-intake plan is actually available, using an approved roster and out-of-office (OOO) data, for an AEM Edge Delivery Services project. It maps absences to the plan's weeks, checks allocations and open roles, flags meeting times outside attendees' working hours, and produces a concise internal PDF report kept outside the repository. Use it after project-intake whenever someone asks who is out during the project, whether a role is covered, whether a roster is current, or whether a meeting time works across time zones, even if they only say "is everyone around in January?". It doesn't write the plan; project-intake does.
 ---
 
 # AEM Edge Delivery Services team availability check
@@ -58,14 +58,21 @@ rewriting an unchanged intake plan.
   conflicts or missing details. Never infer a meeting time or working hours from where someone
   lives.
 
-## Write the internal note
+## Write the internal report
 
-Save one internal Markdown note next to the intake plan, in
-`<projects>/<client>/intake/<client>-availability-note.md`. This directory must be outside the
+Save the Markdown source and final PDF next to the intake plan, in
+`<projects>/<client>/intake/<client>-availability-note.md` and
+`<projects>/<client>/intake/<client>-availability-note.pdf`. This directory must be outside the
 project's Git repository. If its location is unknown or inside the repository, ask for an
-approved external destination; do not save the note in the repository as a fallback.
+approved external destination; do not save either file in the repository as a fallback. The PDF
+is the deliverable; keep the Markdown source beside it for regenerating the report, and do not
+circulate it by default.
 
-Include:
+Follow [availability report template](./references/availability-report-template.md). Make it easy
+to scan: put staffing, absences, meeting checks, source freshness and decisions in short,
+plain-language tables. Use brief prose for the overall finding and context that cannot be
+represented clearly in a table; do not force every detail into a table or let tables become
+paragraphs. Include:
 
 - the intake plan and roster/availability sources reviewed, their last-verified dates, and any
   freshness or access limitations;
@@ -80,3 +87,20 @@ Include:
 Do not edit or overwrite the shareable intake plan by default. If asked to update its **What could
 move it** section, add only anonymized role-and-week rows; never expose names, exact OOO dates or
 reasons there. End the note with the decisions needed to confirm staffing and availability.
+
+## Render and review the PDF
+
+Use the shared renderer and keep the preview pages out of the final deliverables:
+
+```bash
+node <skill>/../progress-report/scripts/render-pdf.mjs \
+  <projects>/<client>/intake/<client>-availability-note.md --no-contents --paper a4 --png
+```
+
+Read the generated page images. Check that the tables are legible, not cramped or split in
+confusing places, and that prose remains brief. Fix the source and render again if needed, then
+remove the generated `-pages/` preview directory. If pandoc or typst is unavailable or rendering
+fails, report the error explicitly; leave the Markdown source in the approved external location
+and say the PDF was not produced. Do not present the Markdown as a completed PDF deliverable.
+When the PDF is ready, give the requester its location and summarize any source limitations and
+decisions still needed.
