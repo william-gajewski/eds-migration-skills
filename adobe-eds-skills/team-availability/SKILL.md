@@ -69,10 +69,11 @@ is the deliverable; keep the Markdown source beside it for regenerating the repo
 circulate it by default.
 
 Follow [availability report template](./references/availability-report-template.md). Make it easy
-to scan: put staffing, absences, meeting checks, source freshness and decisions in short,
-plain-language tables. Use brief prose for the overall finding and context that cannot be
-represented clearly in a table; do not force every detail into a table or let tables become
-paragraphs. Include:
+to scan: use short, plain-language tables for comparable staffing, absence-impact, meeting-check
+and anonymized shared-plan records. Keep the overall finding, source limitations and decisions in
+brief prose or bullets; do not turn explanations or action lists into tables. Keep table cells
+concise, avoid wide tables and long paragraphs in cells, and use bullets or prose when a table
+would have only one item or make the information harder to read. Include:
 
 - the intake plan and roster/availability sources reviewed, their last-verified dates, and any
   freshness or access limitations;
@@ -97,8 +98,9 @@ node <skill>/../progress-report/scripts/render-pdf.mjs \
   <projects>/<client>/intake/<client>-availability-note.md --no-contents --paper a4 --png
 ```
 
-Read the generated page images. Check that the tables are legible, not cramped or split in
-confusing places, and that prose remains brief. Fix the source and render again if needed, then
+Read the generated page images. Check that tables are legible, concise and not cramped or split in
+confusing places, and that headings, prose and lists are easy to scan. Fix the source and render
+again if needed, then
 remove the generated `-pages/` preview directory. If pandoc or typst is unavailable or rendering
 fails, report the error explicitly; leave the Markdown source in the approved external location
 and say the PDF was not produced. Do not present the Markdown as a completed PDF deliverable.
